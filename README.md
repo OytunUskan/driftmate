@@ -28,12 +28,19 @@ V1 scope:
 
 ## Quick start
 
-1. Clone the repository (inside WSL filesystem, never `/mnt/c/...`).
-2. Copy `.env.example` to `.env` and fill in the tokens. `.env` is loaded
-   automatically at startup via `python-dotenv`.
-3. Install: `pip install -e .`
-4. Verify the Docker daemon: `docker ps`
-5. Run: `driftmate` (or `python -m driftmate.app.main`)
+1. Install globally with low friction via pipx (or `pip install -e .` for development):
+   ```bash
+   pipx install .
+   ```
+2. Run the guided interactive setup to configure your tokens and test Docker daemon health:
+   ```bash
+   driftmate init
+   ```
+   *(This guides you through setting up `GITHUB_TOKEN`, `TELEGRAM_BOT_TOKEN`, and automatically detects your `TELEGRAM_CHAT_ID` by prompting you to send a message to your bot).*
+3. Run Driftmate:
+   ```bash
+   driftmate
+   ```
 
 ## Configuration
 
@@ -98,7 +105,10 @@ grep -rnE "from (providers|channels|build)|import (providers|channels|build)" sr
 
 - Persistent state store (Redis/SQLite)
 - `push()` adapter'ı yazılmıştır ancak v1 remediation akışında wire edilmemiştir — build yalnızca local image üretir, registry'e push yapılmaz (bilinçli v1 sınırlaması).
+- **Azure DevOps RepoProvider (V2 feasibility):** Azure DevOps REST API — `getFile` için `GET /{project}/_apis/git/repositories/{repositoryId}/items?path=...`. **`createBranch`, `commitFile` ve `publishBranch`** metotları GitHub'dan farklı olarak ayrı ayrı çağrılamaz; Azure DevOps'ta hepsi **tek bir pushes endpoint'i** üzerinden yapılır: `POST /{project}/_apis/git/repositories/{repositoryId}/pushes` (apiVersion 7.0+). Request body içinde `refUpdates` (branch adı + eski commit SHA) ve `commits[].changes[]` (dosya path, changeType: `add`/`edit`/`delete`, içerik) birlikte gönderilir. PAT scope: `Code (Read/Write)` (`vso.code_write`). ADO adapter'ı, Protocol arayüzünün üç ayrı metodunu bu tek push çağrısında birleştirmek zorundadır.
+- **Slack NotificationChannel (V2 feasibility):** `sendMessage` → `chat.postMessage`; `updateMessage` → `chat.update`; `onAction` → interaktif buton geri bildirimi için **Socket Mode** (public HTTPS endpoint / ngrok gerekmez, WSL2'den çalışır — Telegram polling ile aynı model). Slack Socket Mode WebSocket tabanlıdır; Telegram'ın long-polling + `update.callback_query` modeline karşılık Slack'ta `SocketModeHandler` kullanılarak `interactivity` event'leri dinlenir.
 - AI risk report, Slack, Azure DevOps, AWS CodeBuild
 - Kubernetes manifest drift analysis
 - Webhook-based notification instead of long-polling
 - CI/CD integration (auto-trigger on branch merge)
+- Docker containerization (requires mounting `docker.sock` and a volume for `git worktree` paths if running inside a container).

@@ -6,10 +6,12 @@ and wires them into the vendor-agnostic orchestrator.
 
 import logging
 import os
+import sys
 from typing import Callable
 
 from dotenv import load_dotenv
 
+from driftmate.app.init_cmd import run_init
 from driftmate.build.local_docker_runner import LocalDockerBuildRunner
 from driftmate.channels.common.state_store import InMemoryStateStore
 from driftmate.channels.telegram.telegram_channel import TelegramNotificationChannel
@@ -30,6 +32,10 @@ def build_repo_provider_factory(config: AppConfig) -> Callable[[str, str], RepoP
 
 
 def main() -> None:
+    if len(sys.argv) > 1 and sys.argv[1] == "init":
+        run_init()
+        return
+
     load_dotenv()
     configure_logging()
 

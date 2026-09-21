@@ -1,0 +1,14 @@
+components:
+  - name: broken-component
+    version: 1.10
+    upstream:
+      owner: fake
+      repo: fake
+      path: fake.yaml
+  - name: prometheus
+    version: "2.0.0"
+    upstream:
+      owner: prometheus
+      repo: prometheus
+      path: VERSION
+      ref: main

@@ -214,12 +214,26 @@ def format_report(reports: list[DriftReport]) -> str:
         return "No components configured."
     lines = ["Drift report:"]
     for report in reports:
-        status = "DRIFT" if report.is_drifted else "OK"
-        lines.append(
-            f"- [{status}] {report.component}: "
-            f"{report.declared_version} -> {report.upstream_version} "
-            f"({report.severity})"
-        )
+        if report.is_drifted:
+            status = "DRIFT"
+        elif report.upstream_version == "unknown" and report.recommendation:
+            status = "ERROR"
+        else:
+            status = "OK"
+
+        if status == "ERROR":
+            lines.append(f"- [ERROR] {report.component}: {report.recommendation}")
+        elif status == "DRIFT":
+            lines.append(
+                f"- [DRIFT] {report.component}: "
+                f"{report.declared_version} -> {report.upstream_version} "
+                f"({report.severity})"
+            )
+        else:
+            lines.append(
+                f"- [OK] {report.component}: "
+                f"{report.declared_version} -> {report.upstream_version}"
+            )
     return "\n".join(lines)
 
 

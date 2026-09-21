@@ -12,7 +12,8 @@ import subprocess
 from datetime import datetime, timezone
 from typing import Optional
 
-import yaml
+from ruamel.yaml import YAML
+from ruamel.yaml.scalarstring import DoubleQuotedScalarString
 
 from driftmate.core.interfaces.build_runner import BuildRunner
 from driftmate.core.interfaces.notification_channel import NotificationChannel
@@ -22,6 +23,10 @@ from driftmate.core.models.notification import Action
 from driftmate.core.services.drift_analyzer import DriftAnalyzer, DriftReport
 
 logger = logging.getLogger(__name__)
+
+YAML_RT = YAML()
+YAML_RT.preserve_quotes = True
+YAML_RT.indent(mapping=2, sequence=4, offset=2)
 
 
 class RemediationOrchestrator:
@@ -205,11 +210,12 @@ def format_report(reports: list[DriftReport]) -> str:
 def bump_component_version(
     manifest_text: str, component: str, target_version: str
 ) -> str:
-    data = yaml.safe_load(manifest_text)
-    if not isinstance(data, dict):
-        raise ValueError("Manifest is not a mapping")
-    for item in data.get("components", []):
+    document = YAML_RT.load(manifest_text)
+    for item in document.get("components", []):
         if item.get("name") == component:
-            item["version"] = target_version
-            return yaml.safe_dump(data, sort_keys=False)
+            item["version"] = DoubleQuotedScalarString(target_version)
+            import io
+            buf = io.StringIO()
+            YAML_RT.dump(document, buf)
+            return buf.getvalue()
     raise ValueError(f"Component {component!r} not found in manifest")

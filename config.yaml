@@ -1,0 +1,40 @@
+app:
+  name: driftmate
+  log_level: INFO
+
+repositories:
+  - name: driftmate
+    provider: github
+    owner: OytunUskan
+    repo: driftmate
+    token_env: GITHUB_TOKEN
+    branch_prefix: drift-
+    # Optional: local clone of this repo, used to build the fix branch via
+    # `git worktree`. Leave empty/omit to skip the local build step.
+    checkout_path: ""
+
+notification:
+  channel: telegram
+  telegram:
+    bot_token_env: TELEGRAM_BOT_TOKEN
+    chat_id_env: TELEGRAM_CHAT_ID
+
+build:
+  runner: local_docker
+  # Registry credentials are OPTIONAL (v1 does local builds only, no push).
+  # Omit these env vars entirely to disable registry push.
+  registry:
+    url_env: DOCKER_REGISTRY_URL
+    username_env: DOCKER_USERNAME
+    password_env: DOCKER_PASSWORD
+  dockerfile: Dockerfile
+  build_context: .
+  tag_separator: "-"
+
+remediation:
+  auto_branch: true
+  require_approval: true
+  max_parallel_builds: 2
+
+state:
+  store: in-memory

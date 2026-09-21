@@ -1,0 +1,13 @@
+from typing import Protocol
+
+from driftmate.core.models.repo import Content, Branch, RemoteRef
+
+
+class RepoProvider(Protocol):
+    def getFile(self, path: str, ref: str) -> Content: ...
+
+    def createBranch(self, name: str, fromRef: str) -> Branch: ...
+
+    def commitFile(self, branch: str, path: str, content: str, message: str) -> None: ...
+
+    def publishBranch(self, branch: Branch) -> RemoteRef: ...

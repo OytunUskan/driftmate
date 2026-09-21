@@ -97,7 +97,7 @@ grep -rnE "from (providers|channels|build)|import (providers|channels|build)" sr
 ## Backlog (V2+)
 
 - Persistent state store (Redis/SQLite)
-- Registry push (docker push) wiring
+- `push()` adapter'ı yazılmıştır ancak v1 remediation akışında wire edilmemiştir — build yalnızca local image üretir, registry'e push yapılmaz (bilinçli v1 sınırlaması).
 - AI risk report, Slack, Azure DevOps, AWS CodeBuild
 - Kubernetes manifest drift analysis
 - Webhook-based notification instead of long-polling

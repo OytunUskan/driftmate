@@ -20,7 +20,11 @@ from driftmate.core.interfaces.notification_channel import NotificationChannel
 from driftmate.core.interfaces.repo_provider import RepoProvider
 from driftmate.core.models.build import BuildResult
 from driftmate.core.models.notification import Action
-from driftmate.core.services.drift_analyzer import DriftAnalyzer, DriftReport
+from driftmate.core.services.drift_analyzer import (
+    DriftAnalyzer,
+    DriftReport,
+    ManifestError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +66,19 @@ class RemediationOrchestrator:
             self._notification.sendMessage(f"Unknown action: {action!r}", [])
 
     def handle_analyze(self, user_id: str) -> None:
-        reports = self._analyzer.analyze(self._base_ref)
+        try:
+            reports = self._analyzer.analyze(self._base_ref)
+        except ManifestError as exc:
+            logger.error("Analysis failed for user %s: %s", user_id, exc)
+            self._notification.sendMessage(f"Analiz başarısız: {exc}", [])
+            return
+        except Exception as exc:
+            logger.exception("Unexpected error during analysis for user %s", user_id)
+            self._notification.sendMessage(
+                f"Analiz sırasında beklenmeyen bir hata oluştu: {exc}", []
+            )
+            return
+
         text = format_report(reports)
 
         actions = [

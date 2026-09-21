@@ -50,6 +50,14 @@ class Manifest:
     components: list[ComponentSpec] = field(default_factory=list)
 
 
+class ManifestError(Exception):
+    """Raised when manifest file cannot be fetched or parsed."""
+
+
+class ManifestNotFoundError(ManifestError):
+    """Raised when manifest file is not found at the specified ref."""
+
+
 class DriftAnalyzer:
     def __init__(
         self,
@@ -62,8 +70,18 @@ class DriftAnalyzer:
         self._manifest_path = manifest_path
 
     def analyze(self, ref: str) -> list[DriftReport]:
-        manifest_content = self._repo.getFile(self._manifest_path, ref)
-        manifest = parse_manifest(manifest_content.content)
+        try:
+            manifest_content = self._repo.getFile(self._manifest_path, ref)
+        except Exception as exc:
+            raise ManifestNotFoundError(
+                f"Manifest '{self._manifest_path}' not found at ref '{ref}': {exc}"
+            ) from exc
+        try:
+            manifest = parse_manifest(manifest_content.content)
+        except Exception as exc:
+            raise ManifestError(
+                f"Failed to parse manifest '{self._manifest_path}': {exc}"
+            ) from exc
         return [self._analyze_component(spec) for spec in manifest.components]
 
     def _analyze_component(self, spec: ComponentSpec) -> DriftReport:

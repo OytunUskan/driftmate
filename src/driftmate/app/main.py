@@ -81,6 +81,7 @@ def main() -> None:
     )
 
     notification.onAction(orchestrator.handle_action)
+    notification.onAnalyze(orchestrator.handle_analyze)
 
     logging.info("Starting Driftmate (Telegram long-polling)...")
     notification.start()

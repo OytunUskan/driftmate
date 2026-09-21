@@ -13,7 +13,12 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Callable, Optional
 
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import Application, CallbackQueryHandler
+from telegram.ext import (
+    Application,
+    CallbackQueryHandler,
+    CommandHandler,
+    ContextTypes,
+)
 
 from driftmate.channels.common.state_store import InMemoryStateStore, StateStore
 from driftmate.core.models.notification import Action, MessageRef
@@ -32,6 +37,7 @@ class TelegramNotificationChannel:
         self._chat_id = chat_id
         self._state_store = state_store or InMemoryStateStore()
         self._callback: Optional[Callable[[str, dict], None]] = None
+        self._analyze_callback: Optional[Callable[[str], None]] = None
 
         self._loop = asyncio.new_event_loop()
         self._executor = ThreadPoolExecutor(max_workers=1)
@@ -79,12 +85,29 @@ class TelegramNotificationChannel:
     def onAction(self, callback: Callable[[str, dict], None]) -> None:
         self._callback = callback
 
+    def onAnalyze(self, callback: Callable[[str], None]) -> None:
+        self._analyze_callback = callback
+
     def start(self) -> None:
-        if self._callback is None:
-            raise RuntimeError("onAction must be registered before start()")
+        if self._callback is None and self._analyze_callback is None:
+            raise RuntimeError(
+                "onAction or onAnalyze must be registered before start()"
+            )
         application = Application.builder().token(self._bot.token).build()
         application.add_handler(CallbackQueryHandler(self._handle_query))
+        if self._analyze_callback is not None:
+            application.add_handler(CommandHandler("analyze", self._handle_analyze))
         self._run(application.run_polling())
+
+    async def _handle_analyze(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        if self._analyze_callback is None:
+            return
+        user_id = str(update.effective_user.id)
+        await update.message.reply_text("Analyzing drift...")
+        fut = self._executor.submit(self._analyze_callback, user_id)
+        fut.add_done_callback(self._log_future_exception)
 
     async def _handle_query(self, update: Update, context) -> None:
         query = update.callback_query
@@ -100,7 +123,17 @@ class TelegramNotificationChannel:
 
         user_id = str(query.from_user.id)
         if self._callback is not None:
-            self._executor.submit(self._callback, user_id, metadata)
+            fut = self._executor.submit(self._callback, user_id, metadata)
+            fut.add_done_callback(self._log_future_exception)
+
+    @staticmethod
+    def _log_future_exception(future) -> None:
+        try:
+            exc = future.exception()
+            if exc is not None:
+                logger.error("Error in background executor task: %s", exc, exc_info=exc)
+        except Exception:
+            pass
 
     def _run(self, coro):
         future = asyncio.run_coroutine_threadsafe(coro, self._loop)

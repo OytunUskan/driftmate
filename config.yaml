@@ -11,7 +11,7 @@ repositories:
     branch_prefix: drift-
     # Optional: local clone of this repo, used to build the fix branch via
     # `git worktree`. Leave empty/omit to skip the local build step.
-    checkout_path: ""
+    checkout_path: "/home/jotundev/Projects/driftmate"
 
 notification:
   channel: telegram

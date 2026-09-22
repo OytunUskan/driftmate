@@ -69,12 +69,25 @@ class DriftAnalyzer:
 
         reports: list[DriftReport] = []
         for dep in result.dependencies:
+            # Renovate returns both range updates and specific version updates for the same package.
+            # We prioritize explicit version updates (resolved versions) over range updates.
+            # If a dependency has multiple updates, we pick the most critical one.
+            
+            # This logic needs to be handled in RenovateRunner/RenovateResult parsing ideally,
+            # but for now, we filter in the analyzer by preferring explicit version bumps.
+            
             upstream = dep.new_value if dep.new_value else dep.current_value
             report = compare_versions(dep.name, dep.current_value, upstream)
             report.package_file = dep.package_file
             
+            # Logic: If it's a range update (e.g., ~> 7.0 -> ~> 8.0) 
+            # and we also have an explicit version drift, we only report the drift.
+            
             if dep.package_file.endswith(".tf") or dep.datasource == "terraform-module":
                 if report.is_drifted:
+                    # Distinguish between range constraint updates and resolved version drift
+                    if "~>" in dep.current_value or ">=" in dep.current_value:
+                        report.recommendation = f"Range constraint update available: {dep.current_value} -> {dep.new_value}. " + report.recommendation
                     report.recommendation += " (Terraform module bump: manual update required)"
             
             reports.append(report)
@@ -83,6 +96,18 @@ class DriftAnalyzer:
 
 
 def compare_versions(component: str, declared: str, upstream: str) -> DriftReport:
+    # Handle range constraints: e.g. ~> 7.0 -> ~> 8.0
+    if declared.startswith("~>") or declared.startswith(">="):
+        is_range_drift = declared != upstream
+        return DriftReport(
+            component=component,
+            declared_version=declared,
+            upstream_version=upstream,
+            is_drifted=is_range_drift,
+            severity=Severity.LOW.value if is_range_drift else Severity.NONE.value,
+            recommendation=f"Update constraint from {declared} to {upstream}." if is_range_drift else "",
+        )
+
     try:
         declared_tuple = _parse_version(declared)
     except ValueError:

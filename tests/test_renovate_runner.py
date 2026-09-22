@@ -80,7 +80,7 @@ def test_concurrency_lock(mock_run):
     # Manually acquire lock to simulate concurrent run
     RenovateRunner._lock.acquire()
     try:
-        with pytest.raises(RenovateError, match="Bir analiz zaten sürüyor"):
+        with pytest.raises(RenovateError, match="An analysis is already in progress"):
             runner.run_lookup(".")
     finally:
         RenovateRunner._lock.release()

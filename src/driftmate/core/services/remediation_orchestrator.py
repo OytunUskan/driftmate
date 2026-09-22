@@ -10,7 +10,7 @@ import logging
 import os
 import subprocess
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional
 
 from ruamel.yaml import YAML
 from ruamel.yaml.scalarstring import DoubleQuotedScalarString
@@ -43,7 +43,7 @@ class RemediationOrchestrator:
         manifest_path: str = "driftmate.yaml",
         base_ref: str = "main",
         branch_prefix: str = "drift-",
-        checkout_path: str | None = None,
+        checkout_path: Optional[str] = None,
     ) -> None:
         self._repo = repo
         self._notification = notification
@@ -70,12 +70,12 @@ class RemediationOrchestrator:
             reports = self._analyzer.analyze(self._base_ref)
         except ManifestError as exc:
             logger.error("Analysis failed for user %s: %s", user_id, exc)
-            self._notification.sendMessage(f"Analiz başarısız: {exc}", [])
+            self._notification.sendMessage(f"Analysis failed: {exc}", [])
             return
         except Exception as exc:
             logger.exception("Unexpected error during analysis for user %s", user_id)
             self._notification.sendMessage(
-                f"Analiz sırasında beklenmeyen bir hata oluştu: {exc}", []
+                f"An unexpected error occurred during analysis: {exc}", []
             )
             return
 
@@ -160,7 +160,7 @@ class RemediationOrchestrator:
 
     def _build_fix(
         self, branch_name: str, image_tag: str
-    ) -> BuildResult | None:
+    ) -> Optional[BuildResult]:
         worktree_path = self._prepare_worktree(branch_name)
         if worktree_path is None:
             logger.error(
@@ -176,7 +176,7 @@ class RemediationOrchestrator:
             if worktree_path:
                 self._cleanup_worktree(worktree_path)
 
-    def _prepare_worktree(self, branch_name: str) -> str | None:
+    def _prepare_worktree(self, branch_name: str) -> Optional[str]:
         if not self._checkout_path:
             logger.warning(
                 "No checkout_path configured; building from default context."
@@ -234,11 +234,13 @@ def format_report(reports: list[DriftReport]) -> str:
         else:
             status = "OK"
 
+        pkg_suffix = f" ({report.package_file})" if report.package_file else ""
+
         if status == "ERROR":
-            lines.append(f"- [ERROR] {report.component}: {report.recommendation}")
+            lines.append(f"- [ERROR] {report.component}{pkg_suffix}: {report.recommendation}")
         elif status == "DRIFT":
             lines.append(
-                f"- [DRIFT] {report.component}: "
+                f"- [DRIFT] {report.component}{pkg_suffix}: "
                 f"{report.declared_version} -> {report.upstream_version} "
                 f"({report.severity})"
             )
@@ -246,7 +248,7 @@ def format_report(reports: list[DriftReport]) -> str:
                 lines.append(f"  Note: {report.recommendation}")
         else:
             lines.append(
-                f"- [OK] {report.component}: "
+                f"- [OK] {report.component}{pkg_suffix}: "
                 f"{report.declared_version} -> {report.upstream_version}"
             )
     return "\n".join(lines)
@@ -262,7 +264,6 @@ def bump_package_file(
             stripped = line.strip()
             if stripped.upper().startswith("FROM "):
                 tokens = stripped.split()
-                # Find image token (first non-flag token after FROM)
                 image_idx = -1
                 for idx in range(1, len(tokens)):
                     if not tokens[idx].startswith("--"):
@@ -270,10 +271,10 @@ def bump_package_file(
                         break
                 
                 if image_idx != -1:
-                    raw_image = tokens[image_idx] # e.g. "golang:1.20" or "nginx:1.27@sha256:..."
+                    raw_image = tokens[image_idx]
                     parts = raw_image.split(":")
-                    image_name = parts[0].split("@")[0] # e.g. "golang" or "nginx" or "library/nginx"
-                    short_image_name = image_name.split("/")[-1] # e.g. "nginx"
+                    image_name = parts[0].split("@")[0]
+                    short_image_name = image_name.split("/")[-1]
                     
                     if component in (image_name, short_image_name):
                         digest = ""
@@ -281,7 +282,6 @@ def bump_package_file(
                             digest = "@" + raw_image.split("@", 1)[1]
                         new_image = f"{image_name}:{target_version}{digest}"
                         tokens[image_idx] = new_image
-                        # Preserve original indentation if any
                         indent = line[: len(line) - len(line.lstrip())]
                         line = indent + " ".join(tokens)
             updated_lines.append(line)

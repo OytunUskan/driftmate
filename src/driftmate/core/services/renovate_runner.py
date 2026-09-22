@@ -58,7 +58,7 @@ class RenovateRunner:
     def run_lookup(self, repo_path: str) -> RenovateResult:
         """Run Renovate in dry-run lookup mode and parse the dependencies found."""
         if not self._lock.acquire(blocking=False):
-            raise RenovateError("Bir analiz zaten sürüyor, lütfen bitmesini bekleyin.")
+            raise RenovateError("An analysis is already in progress. Please wait for it to complete.")
 
         try:
             return self._execute_lookup(repo_path)
@@ -148,6 +148,9 @@ class RenovateRunner:
 
     def _extract_from_config(self, config: dict[str, Any], deps_list: list[RenovateDependency]) -> None:
         """Helper to walk the Renovate config object and extract dependencies."""
+        # De-duplicate dependencies: (name, package_file) -> RenovateDependency
+        deduped: dict[tuple[str, str], RenovateDependency] = {}
+
         for manager, files in config.items():
             if not isinstance(files, list):
                 continue
@@ -167,14 +170,22 @@ class RenovateRunner:
                         new_val = update.get("newValue") or update.get("newVersion")
                         upd_type = update.get("updateType")
 
-                    deps_list.append(
-                        RenovateDependency(
-                            name=name,
-                            package_name=dep.get("packageName", name),
-                            current_value=curr,
-                            datasource=dep.get("datasource", "unknown"),
-                            package_file=package_file,
-                            new_value=new_val,
-                            update_type=upd_type
-                        )
+                    dep_key = (name, package_file)
+                    new_dep = RenovateDependency(
+                        name=name,
+                        package_name=dep.get("packageName", name),
+                        current_value=curr,
+                        datasource=dep.get("datasource", "unknown"),
+                        package_file=package_file,
+                        new_value=new_val,
+                        update_type=upd_type
                     )
+
+                    if dep_key in deduped:
+                        # If existing dep has no updates, prefer the new one if it has updates
+                        if deduped[dep_key].new_value is None and new_dep.new_value is not None:
+                            deduped[dep_key] = new_dep
+                    else:
+                        deduped[dep_key] = new_dep
+        
+        deps_list.extend(deduped.values())

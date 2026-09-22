@@ -4,9 +4,11 @@ Bootstraps Driftmate: loads configuration, instantiates the vendor adapters
 and wires them into the vendor-agnostic orchestrator.
 """
 
+import argparse
 import logging
 import os
 import sys
+from pathlib import Path
 from typing import Callable
 
 from dotenv import load_dotenv
@@ -32,12 +34,39 @@ def build_repo_provider_factory(config: AppConfig) -> Callable[[str, str], RepoP
 
 
 def main() -> None:
-    if len(sys.argv) > 1 and sys.argv[1] == "init":
+    parser = argparse.ArgumentParser(
+        prog="driftmate",
+        description="Driftmate — Kubernetes/Helm drift detection via ChatOps.",
+        add_help=True,
+    )
+    parser.add_argument(
+        "command",
+        nargs="?",
+        default=None,
+        help="Subcommand to run (e.g. 'init').",
+    )
+    args = parser.parse_args()
+
+    if args.command == "init":
         run_init()
         return
 
-    load_dotenv()
+    dotenv_path = Path.cwd() / ".env"
+    if not dotenv_path.is_file():
+        raise SystemExit(
+            f"'.env' not found in {Path.cwd()}. Run 'driftmate init' first, "
+            "or export the required environment variables directly."
+        )
+    loaded = load_dotenv(dotenv_path=dotenv_path)
+    if not loaded:
+        raise SystemExit(
+            f"'.env' not found in {Path.cwd()}. Run 'driftmate init' first, "
+            "or export the required environment variables directly."
+        )
+
     configure_logging()
+
+    logging.info("GITHUB_TOKEN set: %s", bool(os.environ.get("GITHUB_TOKEN")))
 
     try:
         config = load_config(os.environ.get("DRIFTMATE_CONFIG", "config.yaml"))

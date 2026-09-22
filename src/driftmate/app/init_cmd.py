@@ -117,5 +117,7 @@ TELEGRAM_CHAT_ID={chat_id}
     with open(env_path, "w", encoding="utf-8") as f:
         f.write(env_content)
 
+    os.chmod(env_path, 0o600)
+
     print(f"\n[SUCCESS] '{env_path}' başarıyla oluşturuldu!")
     print("Şimdi 'driftmate' komutunu çalıştırarak Driftmate'i başlatabilirsiniz.")

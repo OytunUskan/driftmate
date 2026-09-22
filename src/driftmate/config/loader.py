@@ -8,7 +8,7 @@ the key so that the resolved value lands on the base field name.
 
 import os
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 import yaml
 
@@ -25,7 +25,7 @@ class RepositoryConfig:
     repo: str
     token: str = ""
     branch_prefix: str = "drift-"
-    checkout_path: Optional[str] = None
+    checkout_path: str | None = None
 
 
 @dataclass
@@ -36,9 +36,9 @@ class TelegramConfig:
 
 @dataclass
 class RegistryConfig:
-    url: Optional[str] = None
-    username: Optional[str] = None
-    password: Optional[str] = None
+    url: str | None = None
+    username: str | None = None
+    password: str | None = None
 
 
 @dataclass
@@ -142,7 +142,7 @@ def build_config(raw: dict) -> AppConfig:
     return config
 
 
-def _lookup_env(env_name: str, key: str, required: bool = True) -> Optional[str]:
+def _lookup_env(env_name: str, key: str, required: bool = True) -> str | None:
     value = os.environ.get(env_name)
     if value is None and required:
         raise ConfigError(

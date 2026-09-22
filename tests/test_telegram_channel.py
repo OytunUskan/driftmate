@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, patch
 
-from driftmate.channels.telegram.telegram_channel import TelegramNotificationChannel
 from driftmate.channels.common.state_store import InMemoryStateStore
+from driftmate.channels.telegram.telegram_channel import TelegramNotificationChannel
 
 
 def test_telegram_channel_registers_analyze_and_action():

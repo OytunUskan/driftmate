@@ -2,12 +2,11 @@
 
 import base64
 import logging
-from typing import Optional
 
 from github import Github
 from github.GithubException import GithubException, RateLimitExceededException
 
-from driftmate.core.models.repo import Content, Branch, RemoteRef
+from driftmate.core.models.repo import Branch, Content, RemoteRef
 
 logger = logging.getLogger(__name__)
 

@@ -13,3 +13,9 @@ htmlcov/
 /build/
 .venv/
 venv/
+.env.backup
+
+
+# Dev tooling — local only, not part of the product
+.opencode/
+graphify-out/

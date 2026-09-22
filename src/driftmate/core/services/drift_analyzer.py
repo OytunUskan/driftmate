@@ -2,15 +2,12 @@
 
 import logging
 import os
-from dataclasses import dataclass, field
+from collections.abc import Callable
+from dataclasses import dataclass
 from enum import Enum
-from typing import Callable, Optional
-
-import yaml
 
 from driftmate.core.interfaces.repo_provider import RepoProvider
-from driftmate.core.models.repo import Content
-from driftmate.core.services.renovate_runner import RenovateRunner, RenovateError
+from driftmate.core.services.renovate_runner import RenovateError, RenovateRunner
 
 logger = logging.getLogger(__name__)
 
@@ -24,18 +21,6 @@ class Severity(Enum):
 
 
 @dataclass
-class ComponentSpec:
-    name: str
-    version: str
-    upstream_owner: str = ""
-    upstream_repo: str = ""
-    upstream_path: str = ""
-    upstream_ref: str = "main"
-    version_key: Optional[str] = None
-    error: Optional[str] = None
-
-
-@dataclass
 class DriftReport:
     component: str
     declared_version: str
@@ -46,27 +31,22 @@ class DriftReport:
     package_file: str = ""
 
 
-@dataclass
-class Manifest:
-    components: list[ComponentSpec] = field(default_factory=list)
-
-
 class ManifestError(Exception):
-    """Raised when manifest file cannot be fetched or parsed or Renovate execution fails."""
+    """Raised when repository scanning or Renovate execution fails."""
 
 
 class ManifestNotFoundError(ManifestError):
-    """Raised when manifest file is not found at the specified ref."""
+    """Raised when repository path is not found."""
 
 
 class DriftAnalyzer:
     def __init__(
         self,
-        repo: Optional[RepoProvider] = None,
-        upstream_factory: Optional[Callable[[str, str], RepoProvider]] = None,
+        repo: RepoProvider | None = None,
+        upstream_factory: Callable[[str, str], RepoProvider] | None = None,
         manifest_path: str = "driftmate.yaml",
-        checkout_path: Optional[str] = None,
-        renovate_runner: Optional[RenovateRunner] = None,
+        checkout_path: str | None = None,
+        renovate_runner: RenovateRunner | None = None,
     ) -> None:
         self._repo = repo
         self._upstream_factory = upstream_factory
@@ -100,55 +80,6 @@ class DriftAnalyzer:
             reports.append(report)
 
         return reports
-
-
-def parse_manifest(content: str) -> Manifest:
-    data = yaml.safe_load(content) or {}
-    components: list[ComponentSpec] = []
-    for item in data.get("components", []):
-        name = str(item.get("name", ""))
-        raw_version = item.get("version")
-        if not isinstance(raw_version, str):
-            components.append(
-                ComponentSpec(
-                    name=name,
-                    version="",
-                    error="version field must be quoted",
-                )
-            )
-            continue
-        upstream = item.get("upstream", {}) or {}
-        components.append(
-            ComponentSpec(
-                name=name,
-                version=raw_version,
-                upstream_owner=str(upstream.get("owner", "")),
-                upstream_repo=str(upstream.get("repo", "")),
-                upstream_path=str(upstream.get("path", "")),
-                upstream_ref=str(upstream.get("ref", "main")),
-                version_key=upstream.get("version_key"),
-            )
-        )
-    return Manifest(components=components)
-
-
-def extract_version(content: Content, version_key: Optional[str]) -> str:
-    if content.is_binary:
-        return ""
-    if version_key is None:
-        return content.content.strip()
-    data = yaml.safe_load(content.content)
-    if not isinstance(data, dict):
-        return ""
-    value = data.get(version_key)
-    if value is None:
-        return ""
-    if not isinstance(value, str):
-        raise ValueError(
-            f"upstream version field {version_key!r} must be a quoted string; "
-            f"got {type(value).__name__} ({value!r})"
-        )
-    return value.strip()
 
 
 def compare_versions(component: str, declared: str, upstream: str) -> DriftReport:

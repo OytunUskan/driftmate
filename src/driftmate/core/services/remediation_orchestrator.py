@@ -10,7 +10,7 @@ import logging
 import os
 import subprocess
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any
 
 from ruamel.yaml import YAML
 from ruamel.yaml.scalarstring import DoubleQuotedScalarString
@@ -43,7 +43,7 @@ class RemediationOrchestrator:
         manifest_path: str = "driftmate.yaml",
         base_ref: str = "main",
         branch_prefix: str = "drift-",
-        checkout_path: Optional[str] = None,
+        checkout_path: str | None = None,
     ) -> None:
         self._repo = repo
         self._notification = notification
@@ -160,7 +160,7 @@ class RemediationOrchestrator:
 
     def _build_fix(
         self, branch_name: str, image_tag: str
-    ) -> Optional[BuildResult]:
+    ) -> BuildResult | None:
         worktree_path = self._prepare_worktree(branch_name)
         if worktree_path is None:
             logger.error(
@@ -176,7 +176,7 @@ class RemediationOrchestrator:
             if worktree_path:
                 self._cleanup_worktree(worktree_path)
 
-    def _prepare_worktree(self, branch_name: str) -> Optional[str]:
+    def _prepare_worktree(self, branch_name: str) -> str | None:
         if not self._checkout_path:
             logger.warning(
                 "No checkout_path configured; building from default context."

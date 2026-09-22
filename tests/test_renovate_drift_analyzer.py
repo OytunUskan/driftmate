@@ -1,9 +1,8 @@
 from unittest.mock import MagicMock
-import pytest
 
 from driftmate.core.services.drift_analyzer import DriftAnalyzer, Severity
-from driftmate.core.services.renovate_runner import RenovateDependency, RenovateResult
 from driftmate.core.services.remediation_orchestrator import bump_package_file
+from driftmate.core.services.renovate_runner import RenovateDependency, RenovateResult
 
 
 def test_drift_analyzer_with_mocked_renovate():

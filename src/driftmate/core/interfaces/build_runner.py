@@ -1,4 +1,4 @@
-from typing import Optional, Protocol
+from typing import Protocol
 
 from driftmate.core.models.build import BuildResult, Status
 
@@ -8,7 +8,7 @@ class BuildRunner(Protocol):
         self,
         sourceRef: str,
         imageTag: str,
-        context_path: Optional[str] = None,
+        context_path: str | None = None,
     ) -> BuildResult: ...
 
     def push(self, imageTag: str, registryTarget: str) -> None: ...

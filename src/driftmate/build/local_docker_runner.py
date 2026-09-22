@@ -1,7 +1,6 @@
 """Local Docker implementation of the BuildRunner interface."""
 
 import logging
-from typing import Optional
 
 import docker
 
@@ -32,7 +31,7 @@ class LocalDockerBuildRunner:
         self,
         sourceRef: str,
         imageTag: str,
-        context_path: Optional[str] = None,
+        context_path: str | None = None,
     ) -> BuildResult:
         if context_path is None:
             raise RuntimeError(

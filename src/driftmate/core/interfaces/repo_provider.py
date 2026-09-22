@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from driftmate.core.models.repo import Content, Branch, RemoteRef
+from driftmate.core.models.repo import Branch, Content, RemoteRef
 
 
 class RepoProvider(Protocol):

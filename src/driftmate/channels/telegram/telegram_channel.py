@@ -9,8 +9,8 @@ import asyncio
 import logging
 import threading
 import uuid
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from typing import Callable, Optional
 
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
@@ -31,13 +31,13 @@ class TelegramNotificationChannel:
         self,
         bot_token: str,
         chat_id: str,
-        state_store: Optional[StateStore] = None,
+        state_store: StateStore | None = None,
     ) -> None:
         self._bot = Bot(token=bot_token)
         self._chat_id = chat_id
         self._state_store = state_store or InMemoryStateStore()
-        self._callback: Optional[Callable[[str, dict], None]] = None
-        self._analyze_callback: Optional[Callable[[str], None]] = None
+        self._callback: Callable[[str, dict], None] | None = None
+        self._analyze_callback: Callable[[str], None] | None = None
 
         self._loop = asyncio.new_event_loop()
         self._executor = ThreadPoolExecutor(max_workers=1)
@@ -61,7 +61,7 @@ class TelegramNotificationChannel:
         self,
         ref: MessageRef,
         text: str,
-        actions: Optional[list[Action]] = None,
+        actions: list[Action] | None = None,
     ) -> None:
         if actions:
             self._prepare_actions(actions)

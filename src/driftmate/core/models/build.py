@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
 
 
 class Status(Enum):
@@ -14,5 +13,5 @@ class Status(Enum):
 class BuildResult:
     build_id: str
     status: Status
-    logs: Optional[str] = None
-    image_tag: Optional[str] = None
+    logs: str | None = None
+    image_tag: str | None = None

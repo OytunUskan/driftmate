@@ -1,12 +1,11 @@
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
 class Action:
     id: str
     label: str
-    metadata: Optional[dict] = None
+    metadata: dict | None = None
 
 
 @dataclass

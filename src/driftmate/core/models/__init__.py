@@ -1,13 +1,13 @@
-from driftmate.core.models.repo import Content, Branch, RemoteRef
-from driftmate.core.models.build import Status, BuildResult
+from driftmate.core.models.build import BuildResult, Status
 from driftmate.core.models.notification import Action, MessageRef
+from driftmate.core.models.repo import Branch, Content, RemoteRef
 
 __all__ = [
-    "Content",
+    "Action",
     "Branch",
+    "BuildResult",
+    "Content",
+    "MessageRef",
     "RemoteRef",
     "Status",
-    "BuildResult",
-    "Action",
-    "MessageRef",
 ]

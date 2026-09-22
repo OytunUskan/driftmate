@@ -52,26 +52,14 @@ Required env vars: `GITHUB_TOKEN`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
 Registry vars (`DOCKER_REGISTRY_URL`, `DOCKER_USERNAME`, `DOCKER_PASSWORD`)
 are **optional** — v1 does local builds only and never pushes to a registry.
 
-## Manifest
+## Component Discovery (Renovate)
 
-The target repository declares its components in `driftmate.yaml`:
+Driftmate no longer requires a `driftmate.yaml` file. Instead, it utilizes the [Renovate CLI](https://docs.renovatebot.com/) to automatically discover dependencies in your repository.
 
-```yaml
-components:
-  - name: ingress-nginx
-    version: "1.9.5"
-    upstream:
-      owner: kubernetes
-      repo: ingress-nginx
-      path: charts/ingress-nginx/Chart.yaml
-      ref: main
-      version_key: version
-```
+- **Supported Formats**: Dockerfiles, Helm Charts, Terraform modules, and more.
+- **How it works**: When you run `driftmate` (analyze), it automatically scans your project for standard manifest files and compares them against upstream registries.
+- **Remediation**: When you approve a version bump in Telegram, Driftmate automatically applies the fix directly to the native configuration file (e.g., `Dockerfile`, `Chart.yaml`).
 
-- `version_key` is optional; when omitted the upstream file is read as plain text.
-- Versions **must be quoted strings**. Unquoted versions (e.g. `1.10`) are
-  coerced to numbers by YAML and cause a `ValueError` at parse time to avoid
-  silent data loss.
 
 ## Local build (worktree)
 

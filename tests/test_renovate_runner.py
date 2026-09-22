@@ -1,7 +1,9 @@
-import json
-import pytest
 from unittest.mock import MagicMock, patch
-from driftmate.core.services.renovate_runner import RenovateRunner, RenovateError
+
+import pytest
+
+from driftmate.core.services.renovate_runner import RenovateError, RenovateRunner
+
 
 def test_parse_renovate_output_success():
     runner = RenovateRunner()

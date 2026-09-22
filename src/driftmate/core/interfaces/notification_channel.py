@@ -1,4 +1,5 @@
-from typing import Callable, Optional, Protocol
+from collections.abc import Callable
+from typing import Protocol
 
 from driftmate.core.models.notification import Action, MessageRef
 
@@ -10,7 +11,7 @@ class NotificationChannel(Protocol):
         self,
         ref: MessageRef,
         text: str,
-        actions: Optional[list[Action]] = None,
+        actions: list[Action] | None = None,
     ) -> None: ...
 
     def onAction(self, callback: Callable[[str, dict], None]) -> None: ...

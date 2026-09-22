@@ -1,11 +1,7 @@
-import pytest
 
-from driftmate.core.models.repo import Content
 from driftmate.core.services.drift_analyzer import (
     Severity,
     compare_versions,
-    extract_version,
-    parse_manifest,
 )
 
 
@@ -48,78 +44,3 @@ class TestCompareVersions:
     def test_unparseable_declared_is_flagged(self):
         report = compare_versions("foo", "garbage", "1.2.3")
         assert report.recommendation == "declared version unparseable: garbage"
-
-
-class TestParseManifest:
-    def test_parses_components(self):
-        manifest = parse_manifest(
-            "components:\n"
-            "  - name: ingress-nginx\n"
-            "    version: \"1.9.5\"\n"
-            "    upstream:\n"
-            "      owner: kubernetes\n"
-            "      repo: ingress-nginx\n"
-            "      path: charts/ingress-nginx/Chart.yaml\n"
-            "      version_key: version\n"
-        )
-        assert len(manifest.components) == 1
-        spec = manifest.components[0]
-        assert spec.name == "ingress-nginx"
-        assert spec.version == "1.9.5"
-        assert spec.upstream_owner == "kubernetes"
-        assert spec.upstream_ref == "main"
-        assert spec.version_key == "version"
-
-    def test_unquoted_version_marks_error_not_raises(self):
-        manifest = parse_manifest(
-            "components:\n"
-            "  - name: foo\n"
-            "    version: 1.10\n"
-            "    upstream:\n"
-            "      owner: a\n"
-            "      repo: b\n"
-            "      path: c\n"
-        )
-        assert len(manifest.components) == 1
-        assert manifest.components[0].error == "version field must be quoted"
-
-    def test_bad_component_does_not_stop_others(self):
-        manifest = parse_manifest(
-            "components:\n"
-            "  - name: bad\n"
-            "    version: 1.10\n"
-            "    upstream:\n"
-            "      owner: a\n"
-            "      repo: b\n"
-            "      path: c\n"
-            "  - name: good\n"
-            "    version: \"1.9.5\"\n"
-            "    upstream:\n"
-            "      owner: kubernetes\n"
-            "      repo: ingress-nginx\n"
-            "      path: Chart.yaml\n"
-        )
-        assert manifest.components[0].error is not None
-        assert manifest.components[1].error is None
-        assert manifest.components[1].version == "1.9.5"
-
-
-class TestExtractVersion:
-    def test_extract_plain_text(self):
-        content = Content(path="VERSION", content="1.2.3\n", sha="x")
-        assert extract_version(content, None) == "1.2.3"
-
-    def test_extract_yaml_key(self):
-        content = Content(
-            path="Chart.yaml", content="version: 1.10.0\nappVersion: 1.9.0\n", sha="x"
-        )
-        assert extract_version(content, "version") == "1.10.0"
-
-    def test_extract_binary_returns_empty(self):
-        content = Content(path="Chart.yaml", content="\x00", sha="x", is_binary=True)
-        assert extract_version(content, "version") == ""
-
-    def test_extract_yaml_numeric_version_raises(self):
-        content = Content(path="Chart.yaml", content="version: 1.10\n", sha="x")
-        with pytest.raises(ValueError):
-            extract_version(content, "version")

@@ -7,9 +7,8 @@ and wires them into the vendor-agnostic orchestrator.
 import argparse
 import logging
 import os
-import sys
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from dotenv import load_dotenv
 

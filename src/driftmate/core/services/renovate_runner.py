@@ -8,7 +8,7 @@ import subprocess
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -24,8 +24,8 @@ class RenovateDependency:
     current_value: str
     datasource: str
     package_file: str
-    new_value: Optional[str] = None
-    update_type: Optional[str] = None
+    new_value: str | None = None
+    update_type: str | None = None
 
 
 @dataclass
@@ -36,7 +36,7 @@ class RenovateResult:
 class RenovateRunner:
     _lock = threading.Lock()
 
-    def __init__(self, binary_path: Optional[str] = None) -> None:
+    def __init__(self, binary_path: str | None = None) -> None:
         self._binary = binary_path or shutil.which("renovate")
 
     def check_health(self) -> bool:
@@ -82,6 +82,7 @@ class RenovateRunner:
             self._binary,
             "--platform=local",
             "--dry-run=lookup",
+            "--enabled-managers=dockerfile,helmv3,terraform",
             "--cache-dir",
             str(cache_dir),
         ]

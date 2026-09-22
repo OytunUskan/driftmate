@@ -9,9 +9,7 @@ import getpass
 import json
 import os
 import subprocess
-import time
 import urllib.request
-from typing import Optional
 
 
 def run_init() -> None:
@@ -44,7 +42,7 @@ def run_init() -> None:
     print("  2. Send any message to the bot (e.g., 'hello' or 'merhaba')")
     input("Press Enter once you have sent the message to the bot... ")
 
-    chat_id: Optional[str] = None
+    chat_id: str | None = None
     url = f"https://api.telegram.org/bot{telegram_bot_token}/getUpdates"
 
     for attempt in range(1, 6):

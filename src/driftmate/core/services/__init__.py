@@ -1,33 +1,25 @@
 from driftmate.core.services.drift_analyzer import (
     DriftAnalyzer,
     DriftReport,
-    ComponentSpec,
-    Manifest,
-    Severity,
     ManifestError,
     ManifestNotFoundError,
-    parse_manifest,
-    extract_version,
+    Severity,
     compare_versions,
 )
 from driftmate.core.services.remediation_orchestrator import (
     RemediationOrchestrator,
-    format_report,
     bump_component_version,
+    format_report,
 )
 
 __all__ = [
     "DriftAnalyzer",
     "DriftReport",
-    "ComponentSpec",
-    "Manifest",
-    "Severity",
     "ManifestError",
     "ManifestNotFoundError",
-    "parse_manifest",
-    "extract_version",
-    "compare_versions",
     "RemediationOrchestrator",
-    "format_report",
+    "Severity",
     "bump_component_version",
+    "compare_versions",
+    "format_report",
 ]

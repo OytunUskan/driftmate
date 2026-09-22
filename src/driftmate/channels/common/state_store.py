@@ -6,13 +6,13 @@ adapter-level concern; the core package never imports it. V1 ships an
 in-memory implementation whose data is lost on restart.
 """
 
-from typing import Any, Optional, Protocol
+from typing import Any, Protocol
 
 
 class StateStore(Protocol):
     def set(self, key: str, value: Any) -> None: ...
 
-    def get(self, key: str) -> Optional[Any]: ...
+    def get(self, key: str) -> Any | None: ...
 
     def delete(self, key: str) -> None: ...
 
@@ -24,7 +24,7 @@ class InMemoryStateStore:
     def set(self, key: str, value: Any) -> None:
         self._store[key] = value
 
-    def get(self, key: str) -> Optional[Any]:
+    def get(self, key: str) -> Any | None:
         return self._store.get(key)
 
     def delete(self, key: str) -> None:

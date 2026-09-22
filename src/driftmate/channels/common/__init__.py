@@ -1,3 +1,3 @@
-from driftmate.channels.common.state_store import StateStore, InMemoryStateStore
+from driftmate.channels.common.state_store import InMemoryStateStore, StateStore
 
-__all__ = ["StateStore", "InMemoryStateStore"]
+__all__ = ["InMemoryStateStore", "StateStore"]

@@ -222,6 +222,13 @@ class RemediationOrchestrator:
         return f"{self._branch_prefix}{slug}-{timestamp}"
 
 
+def _format_vuln_summary(report: DriftReport) -> str:
+    if report.vuln_summary is not None:
+        vs = report.vuln_summary
+        return f"  CVEs: {vs.critical} CRITICAL, {vs.high} HIGH, {vs.medium} MEDIUM, {vs.low} LOW, {vs.unknown} UNKNOWN"
+    return ""
+
+
 def format_report(reports: list[DriftReport]) -> str:
     if not reports:
         return "No components configured."
@@ -238,18 +245,16 @@ def format_report(reports: list[DriftReport]) -> str:
 
         if status == "ERROR":
             lines.append(f"- [ERROR] {report.component}{pkg_suffix}: {report.recommendation}")
+            if vs := _format_vuln_summary(report):
+                lines.append(vs)
         elif status == "DRIFT":
             lines.append(
                 f"- [DRIFT] {report.component}{pkg_suffix}: "
                 f"{report.declared_version} -> {report.upstream_version} "
                 f"({report.severity})"
             )
-            if report.vuln_summary is not None:
-                vs = report.vuln_summary
-                lines.append(
-                    f"  CVEs: {vs.critical} CRITICAL, {vs.high} HIGH, {vs.medium} MEDIUM, "
-                    f"{vs.low} LOW, {vs.unknown} UNKNOWN"
-                )
+            if vs := _format_vuln_summary(report):
+                lines.append(vs)
             if report.recommendation and report.recommendation != f"Update {report.component} from {report.declared_version} to {report.upstream_version}.":
                 lines.append(f"  Note: {report.recommendation}")
         else:
@@ -257,6 +262,8 @@ def format_report(reports: list[DriftReport]) -> str:
                 f"- [OK] {report.component}{pkg_suffix}: "
                 f"{report.declared_version} -> {report.upstream_version}"
             )
+            if vs := _format_vuln_summary(report):
+                lines.append(vs)
     return "\n".join(lines)
 
 

@@ -2,7 +2,9 @@
 
 import json
 import logging
+import os
 import shutil
+import sys
 import subprocess
 from dataclasses import dataclass, field
 from typing import Any, Optional
@@ -62,6 +64,7 @@ class TrivyRunner:
 
         cmd = [self._binary, "image", image_ref, "--format", "json", "--scanners", "vuln"]
         logger.debug("Executing Trivy: %s", " ".join(cmd))
+        print(f"DEBUG_TRIVY: Executing Trivy for {image_ref}", file=sys.stderr)
 
         try:
             result = subprocess.run(

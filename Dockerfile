@@ -1,2 +1,2 @@
-FROM busybox:latest
-COPY driftmate.yaml /driftmate.yaml
+FROM nginx:1.27
+COPY . /usr/share/nginx/html

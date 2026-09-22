@@ -103,6 +103,7 @@ def main() -> None:
     analyzer = DriftAnalyzer(
         repo=repo_provider,
         upstream_factory=build_repo_provider_factory(config),
+        checkout_path=repo_config.checkout_path,
     )
 
     orchestrator = RemediationOrchestrator(

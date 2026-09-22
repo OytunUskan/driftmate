@@ -1,10 +1,7 @@
-"""Vendor-agnostic drift detection.
+"""Vendor-agnostic drift detection powered by Renovate CLI."""
 
-Compares component versions declared in a target repository against the
-versions declared in their upstream GitHub repositories (Option A).
-There is no live cluster connection; cluster-state fetching is out of scope.
-"""
-
+import logging
+import os
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Callable, Optional
@@ -13,6 +10,9 @@ import yaml
 
 from driftmate.core.interfaces.repo_provider import RepoProvider
 from driftmate.core.models.repo import Content
+from driftmate.core.services.renovate_runner import RenovateRunner, RenovateError
+
+logger = logging.getLogger(__name__)
 
 
 class Severity(Enum):
@@ -43,6 +43,7 @@ class DriftReport:
     is_drifted: bool = False
     severity: str = Severity.NONE.value
     recommendation: str = ""
+    package_file: str = ""
 
 
 @dataclass
@@ -51,7 +52,7 @@ class Manifest:
 
 
 class ManifestError(Exception):
-    """Raised when manifest file cannot be fetched or parsed."""
+    """Raised when manifest file cannot be fetched or parsed or Renovate execution fails."""
 
 
 class ManifestNotFoundError(ManifestError):
@@ -61,80 +62,44 @@ class ManifestNotFoundError(ManifestError):
 class DriftAnalyzer:
     def __init__(
         self,
-        repo: RepoProvider,
-        upstream_factory: Callable[[str, str], RepoProvider],
+        repo: Optional[RepoProvider] = None,
+        upstream_factory: Optional[Callable[[str, str], RepoProvider]] = None,
         manifest_path: str = "driftmate.yaml",
+        checkout_path: Optional[str] = None,
+        renovate_runner: Optional[RenovateRunner] = None,
     ) -> None:
         self._repo = repo
         self._upstream_factory = upstream_factory
         self._manifest_path = manifest_path
+        self._checkout_path = checkout_path or os.getcwd()
+        self._renovate_runner = renovate_runner or RenovateRunner()
 
-    def analyze(self, ref: str) -> list[DriftReport]:
-        try:
-            manifest_content = self._repo.getFile(self._manifest_path, ref)
-        except Exception as exc:
-            raise ManifestNotFoundError(
-                f"Manifest '{self._manifest_path}' not found at ref '{ref}': {exc}"
-            ) from exc
-        try:
-            manifest = parse_manifest(manifest_content.content)
-        except Exception as exc:
+    def analyze(self, ref: str = "main") -> list[DriftReport]:
+        if not self._renovate_runner.check_health():
             raise ManifestError(
-                f"Failed to parse manifest '{self._manifest_path}': {exc}"
-            ) from exc
-        return [self._analyze_component(spec) for spec in manifest.components]
-
-    def _analyze_component(self, spec: ComponentSpec) -> DriftReport:
-        if spec.error:
-            return DriftReport(
-                component=spec.name,
-                declared_version=spec.version,
-                upstream_version="unknown",
-                is_drifted=False,
-                severity=Severity.NONE.value,
-                recommendation=spec.error,
+                "Renovate CLI is not installed or not healthy. Run 'npm install -g renovate'."
             )
 
         try:
-            upstream_provider = self._upstream_factory(
-                spec.upstream_owner, spec.upstream_repo
-            )
-            upstream_content = upstream_provider.getFile(
-                spec.upstream_path, spec.upstream_ref
-            )
+            result = self._renovate_runner.run_lookup(self._checkout_path)
+        except RenovateError as exc:
+            raise ManifestError(str(exc)) from exc
         except Exception as exc:
-            return DriftReport(
-                component=spec.name,
-                declared_version=spec.version,
-                upstream_version="unknown",
-                is_drifted=False,
-                severity=Severity.NONE.value,
-                recommendation=f"Unable to fetch upstream version: {exc}",
-            )
+            raise ManifestError(f"Renovate lookup failed: {exc}") from exc
 
-        try:
-            upstream_version = extract_version(upstream_content, spec.version_key)
-        except ValueError as exc:
-            return DriftReport(
-                component=spec.name,
-                declared_version=spec.version,
-                upstream_version="unknown",
-                is_drifted=False,
-                severity=Severity.NONE.value,
-                recommendation=str(exc),
-            )
+        reports: list[DriftReport] = []
+        for dep in result.dependencies:
+            upstream = dep.new_value if dep.new_value else dep.current_value
+            report = compare_versions(dep.name, dep.current_value, upstream)
+            report.package_file = dep.package_file
+            
+            if dep.package_file.endswith(".tf") or dep.datasource == "terraform-module":
+                if report.is_drifted:
+                    report.recommendation += " (Terraform module bump: manual update required)"
+            
+            reports.append(report)
 
-        if not upstream_version:
-            return DriftReport(
-                component=spec.name,
-                declared_version=spec.version,
-                upstream_version="unknown",
-                is_drifted=False,
-                severity=Severity.NONE.value,
-                recommendation="Unable to determine upstream version.",
-            )
-
-        return compare_versions(spec.name, spec.version, upstream_version)
+        return reports
 
 
 def parse_manifest(content: str) -> Manifest:
@@ -198,6 +163,7 @@ def compare_versions(component: str, declared: str, upstream: str) -> DriftRepor
             severity=Severity.NONE.value,
             recommendation=f"declared version unparseable: {declared}",
         )
+
     try:
         upstream_tuple = _parse_version(upstream)
     except ValueError:

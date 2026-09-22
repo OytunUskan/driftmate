@@ -10,7 +10,7 @@ import logging
 import os
 import subprocess
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 
 from ruamel.yaml import YAML
 from ruamel.yaml.scalarstring import DoubleQuotedScalarString
@@ -54,7 +54,7 @@ class RemediationOrchestrator:
         self._branch_prefix = branch_prefix
         self._checkout_path = checkout_path
 
-    def handle_action(self, user_id: str, callback_data: dict) -> None:
+    def handle_action(self, user_id: str, callback_data: dict[str, Any]) -> None:
         action = callback_data.get("action")
         if action == "analyze":
             self.handle_analyze(user_id)
@@ -89,33 +89,46 @@ class RemediationOrchestrator:
                     "action": "approve",
                     "component": r.component,
                     "target_version": r.upstream_version,
+                    "package_file": r.package_file,
                 },
             )
             for r in reports
             if r.is_drifted and r.upstream_version != "unknown"
+            and not (r.package_file.endswith(".tf") or "terraform" in r.package_file.lower())
         ]
         if actions:
             actions.append(Action(id="", label="Reject", metadata={"action": "reject"}))
 
         self._notification.sendMessage(text, actions)
 
-    def handle_approve(self, user_id: str, data: dict) -> None:
+    def handle_approve(self, user_id: str, data: dict[str, Any]) -> None:
         component = data.get("component")
         target_version = data.get("target_version")
+        package_file = data.get("package_file", "")
         if not component or not target_version:
             self._notification.sendMessage("Invalid approval payload.", [])
+            return
+
+        if not package_file:
+            package_file = self._manifest_path
+
+        if package_file.endswith(".tf") or "terraform" in package_file.lower():
+            self._notification.sendMessage(
+                f"Auto-bump not supported for Terraform modules ({component}). Please update manually.",
+                [],
+            )
             return
 
         branch = self._repo.createBranch(
             self._branch_name(component), self._base_ref
         )
 
-        current = self._repo.getFile(self._manifest_path, self._base_ref)
-        updated = bump_component_version(current.content, component, target_version)
+        current = self._repo.getFile(package_file, self._base_ref)
+        updated = bump_package_file(current.content, package_file, component, target_version)
 
         self._repo.commitFile(
             branch.name,
-            self._manifest_path,
+            package_file,
             updated,
             f"chore(drift): bump {component} to {target_version}",
         )
@@ -139,6 +152,11 @@ class RemediationOrchestrator:
             )
 
         self._notification.sendMessage(text, [])
+
+    def handle_reject(self, user_id: str) -> None:
+        self._notification.sendMessage(
+            "Remediation rejected. No changes made.", []
+        )
 
     def _build_fix(
         self, branch_name: str, image_tag: str
@@ -198,11 +216,6 @@ class RemediationOrchestrator:
         except (subprocess.CalledProcessError, FileNotFoundError) as exc:
             logger.error("Failed to clean up worktree %s: %s", worktree_path, exc)
 
-    def handle_reject(self, user_id: str) -> None:
-        self._notification.sendMessage(
-            "Remediation rejected. No changes made.", []
-        )
-
     def _branch_name(self, component: str) -> str:
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
         slug = "".join(c if c.isalnum() else "-" for c in component.lower())
@@ -229,6 +242,8 @@ def format_report(reports: list[DriftReport]) -> str:
                 f"{report.declared_version} -> {report.upstream_version} "
                 f"({report.severity})"
             )
+            if report.recommendation and report.recommendation != f"Update {report.component} from {report.declared_version} to {report.upstream_version}.":
+                lines.append(f"  Note: {report.recommendation}")
         else:
             lines.append(
                 f"- [OK] {report.component}: "
@@ -237,15 +252,67 @@ def format_report(reports: list[DriftReport]) -> str:
     return "\n".join(lines)
 
 
+def bump_package_file(
+    file_content: str, package_file: str, component: str, target_version: str
+) -> str:
+    if package_file.endswith("Dockerfile") or "Dockerfile" in package_file:
+        lines = file_content.splitlines()
+        updated_lines = []
+        for line in lines:
+            stripped = line.strip()
+            if stripped.upper().startswith("FROM "):
+                tokens = stripped.split()
+                # Find image token (first non-flag token after FROM)
+                image_idx = -1
+                for idx in range(1, len(tokens)):
+                    if not tokens[idx].startswith("--"):
+                        image_idx = idx
+                        break
+                
+                if image_idx != -1:
+                    raw_image = tokens[image_idx] # e.g. "golang:1.20" or "nginx:1.27@sha256:..."
+                    parts = raw_image.split(":")
+                    image_name = parts[0].split("@")[0] # e.g. "golang" or "nginx" or "library/nginx"
+                    short_image_name = image_name.split("/")[-1] # e.g. "nginx"
+                    
+                    if component in (image_name, short_image_name):
+                        digest = ""
+                        if "@" in raw_image:
+                            digest = "@" + raw_image.split("@", 1)[1]
+                        new_image = f"{image_name}:{target_version}{digest}"
+                        tokens[image_idx] = new_image
+                        # Preserve original indentation if any
+                        indent = line[: len(line) - len(line.lstrip())]
+                        line = indent + " ".join(tokens)
+            updated_lines.append(line)
+        return "\n".join(updated_lines) + "\n"
+    elif package_file.endswith("Chart.yaml") or package_file.endswith("Chart.yml"):
+        doc = YAML_RT.load(file_content)
+        for dep in doc.get("dependencies", []):
+            if dep.get("name") == component:
+                dep["version"] = DoubleQuotedScalarString(target_version)
+        import io
+        buf = io.StringIO()
+        YAML_RT.dump(doc, buf)
+        return buf.getvalue()
+    else:
+        raise ValueError(f"Unsupported package file format: {package_file}")
+
+
 def bump_component_version(
     manifest_text: str, component: str, target_version: str
 ) -> str:
-    document = YAML_RT.load(manifest_text)
-    for item in document.get("components", []):
-        if item.get("name") == component:
-            item["version"] = DoubleQuotedScalarString(target_version)
-            import io
-            buf = io.StringIO()
-            YAML_RT.dump(document, buf)
-            return buf.getvalue()
-    raise ValueError(f"Component {component!r} not found in manifest")
+    """Backward-compatible wrapper for driftmate.yaml bumping."""
+    try:
+        document = YAML_RT.load(manifest_text)
+        if document and "components" in document:
+            for item in document.get("components", []):
+                if item.get("name") == component:
+                    item["version"] = DoubleQuotedScalarString(target_version)
+                    import io
+                    buf = io.StringIO()
+                    YAML_RT.dump(document, buf)
+                    return buf.getvalue()
+    except Exception:
+        pass
+    return manifest_text

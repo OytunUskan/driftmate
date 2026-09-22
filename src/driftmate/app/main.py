@@ -13,6 +13,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from driftmate.app.init_cmd import run_init
+from driftmate.app.scan_cmd import run_scan
 from driftmate.build.local_docker_runner import LocalDockerBuildRunner
 from driftmate.channels.common.state_store import InMemoryStateStore
 from driftmate.channels.telegram.telegram_channel import TelegramNotificationChannel
@@ -38,16 +39,22 @@ def main() -> None:
         description="Driftmate — Kubernetes/Helm drift detection via ChatOps.",
         add_help=True,
     )
-    parser.add_argument(
-        "command",
-        nargs="?",
-        default=None,
-        help="Subcommand to run (e.g. 'init').",
-    )
+    subparsers = parser.add_subparsers(dest="command")
+
+    subparsers.add_parser("init", help="Run interactive setup.")
+
+    scan_parser = subparsers.add_parser("scan", help="Scan local path for drift without tokens.")
+    scan_parser.add_argument("path", nargs="?", default=None, help="Path to scan (defaults to cwd).")
+    scan_parser.add_argument("-o", "--output", default=None, help="Output markdown report path.")
+
     args = parser.parse_args()
 
     if args.command == "init":
         run_init()
+        return
+
+    if args.command == "scan":
+        run_scan(path=args.path, output=args.output)
         return
 
     dotenv_path = Path.cwd() / ".env"

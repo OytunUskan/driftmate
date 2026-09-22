@@ -2,12 +2,16 @@
 
 import logging
 import os
-from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
+from typing import Callable, Optional
+
+import yaml
 
 from driftmate.core.interfaces.repo_provider import RepoProvider
-from driftmate.core.services.renovate_runner import RenovateError, RenovateRunner
+from driftmate.core.models.repo import Content
+from driftmate.core.services.renovate_runner import RenovateRunner, RenovateError
+from driftmate.core.services.trivy_runner import TrivyRunner, VulnSummary
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +33,7 @@ class DriftReport:
     severity: str = Severity.NONE.value
     recommendation: str = ""
     package_file: str = ""
+    vuln_summary: Optional[VulnSummary] = None
 
 
 class ManifestError(Exception):
@@ -42,19 +47,26 @@ class ManifestNotFoundError(ManifestError):
 class DriftAnalyzer:
     def __init__(
         self,
-        repo: RepoProvider | None = None,
-        upstream_factory: Callable[[str, str], RepoProvider] | None = None,
+        repo: Optional[RepoProvider] = None,
+        upstream_factory: Optional[Callable[[str, str], RepoProvider]] = None,
         manifest_path: str = "driftmate.yaml",
-        checkout_path: str | None = None,
-        renovate_runner: RenovateRunner | None = None,
+        checkout_path: Optional[str] = None,
+        renovate_runner: Optional[RenovateRunner] = None,
+        trivy_runner: Optional[TrivyRunner] = None,
     ) -> None:
         self._repo = repo
         self._upstream_factory = upstream_factory
         self._manifest_path = manifest_path
         self._checkout_path = checkout_path or os.getcwd()
         self._renovate_runner = renovate_runner or RenovateRunner()
+        self._trivy_runner = trivy_runner or TrivyRunner()
 
-    def analyze(self, ref: str = "main") -> list[DriftReport]:
+    def analyze(
+        self, 
+        ref: str = "main", 
+        scan_cve: bool = False,
+        cve_target: Optional[str] = None
+    ) -> list[DriftReport]:
         if not self._renovate_runner.check_health():
             raise ManifestError(
                 "Renovate CLI is not installed or not healthy. Run 'npm install -g renovate'."
@@ -67,25 +79,44 @@ class DriftAnalyzer:
         except Exception as exc:
             raise ManifestError(f"Renovate lookup failed: {exc}") from exc
 
+        # Health check Trivy if requested
+        if scan_cve and not self._trivy_runner.check_health():
+            raise ManifestError(
+                "Trivy CLI is not installed or not healthy. Run 'curl -sfL ... | sh' to install."
+            )
+
+        # Note: Trivy image scans may time out (~120s default) for very large base
+        # images (e.g., JDK-based eclipse-temurin). If scan_cve is enabled and
+        # timeout occurs, the component skips CVE data but drift is still reported.
         reports: list[DriftReport] = []
-        for dep in result.dependencies:
-            # Renovate returns both range updates and specific version updates for the same package.
-            # We prioritize explicit version updates (resolved versions) over range updates.
-            # If a dependency has multiple updates, we pick the most critical one.
-            
-            # This logic needs to be handled in RenovateRunner/RenovateResult parsing ideally,
-            # but for now, we filter in the analyzer by preferring explicit version bumps.
+        
+        # Filter dependencies if cve_target is specified
+        deps_to_scan = result.dependencies
+        if cve_target:
+            deps_to_scan = [d for d in deps_to_scan if cve_target in d.package_file]
+
+        for i, dep in enumerate(deps_to_scan):
+            if scan_cve:
+                image_ref = f"{dep.name}:{dep.current_value}" if dep.datasource == "docker" else None
+            else:
+                image_ref = None
             
             upstream = dep.new_value if dep.new_value else dep.current_value
             report = compare_versions(dep.name, dep.current_value, upstream)
             report.package_file = dep.package_file
             
-            # Logic: If it's a range update (e.g., ~> 7.0 -> ~> 8.0) 
-            # and we also have an explicit version drift, we only report the drift.
-            
+            if scan_cve and dep.datasource == "docker":
+                image_ref = f"{dep.name}:{dep.current_value}" if dep.datasource == "docker" else None
+                if image_ref:
+                    try:
+                        vs = self._trivy_runner.scan_image(image_ref)
+                        report.vuln_summary = vs
+                    except Exception as exc:
+                        logger.error("Trivy scan failed for %s: %s", dep.name, exc)
+                        # Continue with drift report but no CVE data
+
             if dep.package_file.endswith(".tf") or dep.datasource == "terraform-module":
                 if report.is_drifted:
-                    # Distinguish between range constraint updates and resolved version drift
                     if "~>" in dep.current_value or ">=" in dep.current_value:
                         report.recommendation = f"Range constraint update available: {dep.current_value} -> {dep.new_value}. " + report.recommendation
                     report.recommendation += " (Terraform module bump: manual update required)"

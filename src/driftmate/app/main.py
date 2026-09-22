@@ -46,6 +46,8 @@ def main() -> None:
     scan_parser = subparsers.add_parser("scan", help="Scan local path for drift without tokens.")
     scan_parser.add_argument("path", nargs="?", default=None, help="Path to scan (defaults to cwd).")
     scan_parser.add_argument("-o", "--output", default=None, help="Output markdown report path.")
+    scan_parser.add_argument("--cve", action="store_true", default=False, help="Enable Trivy CVE scanning.")
+    scan_parser.add_argument("--cve-target", default=None, help="Only scan the specified package file path.")
 
     args = parser.parse_args()
 
@@ -54,7 +56,7 @@ def main() -> None:
         return
 
     if args.command == "scan":
-        run_scan(path=args.path, output=args.output)
+        run_scan(path=args.path, output=args.output, scan_cve=args.cve, cve_target=args.cve_target)
         return
 
     dotenv_path = Path.cwd() / ".env"

@@ -11,17 +11,20 @@ from driftmate.core.services.remediation_orchestrator import format_report
 logger = logging.getLogger(__name__)
 
 
-def run_scan(path: Optional[str] = None, output: Optional[str] = None) -> None:
+def run_scan(path: Optional[str] = None, output: Optional[str] = None, scan_cve: bool = False, cve_target: Optional[str] = None) -> None:
     target_path = path or os.getcwd()
     if not os.path.isdir(target_path):
         print(f"Error: Directory not found: {target_path}")
         raise SystemExit(1)
 
+    if scan_cve:
+        print("CVE scanning enabled (Trivy) — image scans begin now (progress shown):")
+
     print(f"Scanning directory: {target_path} ...")
     analyzer = DriftAnalyzer(checkout_path=target_path)
 
     try:
-        reports = analyzer.analyze("main")
+        reports = analyzer.analyze("main", scan_cve=scan_cve, cve_target=cve_target)
     except ManifestError as exc:
         print(f"Scan failed: {exc}")
         raise SystemExit(1) from exc

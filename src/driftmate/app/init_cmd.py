@@ -16,6 +16,7 @@ import urllib.request
 from typing import Optional
 
 from driftmate.core.services.renovate_runner import RenovateRunner
+from driftmate.core.services.trivy_runner import TrivyRunner
 
 
 def _check_renovate():
@@ -56,8 +57,16 @@ def _check_renovate():
 def run_init() -> None:
     print("=== Driftmate Interactive Setup ===\n")
 
-    # 0. Renovate Check
+    # Renovate Check (silent on success)
     _check_renovate()
+
+    # Optional Trivy Check
+    try:
+        trivy_runner = TrivyRunner()
+        if not trivy_runner.check_health():
+            print("Warning: Trivy CLI not installed. CVE scanning unavailable.")
+    except Exception:
+        pass
 
     # 1. GitHub Token
     print("Step 1: GitHub Personal Access Token")

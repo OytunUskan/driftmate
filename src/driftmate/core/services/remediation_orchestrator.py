@@ -244,6 +244,12 @@ def format_report(reports: list[DriftReport]) -> str:
                 f"{report.declared_version} -> {report.upstream_version} "
                 f"({report.severity})"
             )
+            if report.vuln_summary is not None:
+                vs = report.vuln_summary
+                lines.append(
+                    f"  CVEs: {vs.critical} CRITICAL, {vs.high} HIGH, {vs.medium} MEDIUM, "
+                    f"{vs.low} LOW, {vs.unknown} UNKNOWN"
+                )
             if report.recommendation and report.recommendation != f"Update {report.component} from {report.declared_version} to {report.upstream_version}.":
                 lines.append(f"  Note: {report.recommendation}")
         else:

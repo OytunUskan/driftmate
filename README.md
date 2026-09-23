@@ -137,6 +137,20 @@ is modified during discovery.
 - `push()` adapter is implemented but not wired in the V1 remediation flow;
   builds produce only local images, registry pushes are not performed
   (conscious V1 limitation).
+```bash
+driftmate scan /path/to/repo
+# Standalone, fast — version drift only (no CVE)
+
+driftmate scan --cve /path/to/repo
+# Standalone + vulnerability scanning (~60-120s per image)
+
+driftmate scan --cve-target Dockerfile /path/to/repo
+# Target single package file; implies --cve
+
+driftmate
+# Full mode: Telegram + GitHub, human-approved fix flow
+```
+
 - `driftmate scan` produces reports locally only; opening a branch/commit
   requires full mode with a configured `RepoProvider`.
 

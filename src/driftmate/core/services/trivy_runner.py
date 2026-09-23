@@ -6,6 +6,7 @@ import os
 import shutil
 import sys
 import subprocess
+import time
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
@@ -63,8 +64,9 @@ class TrivyRunner:
             )
 
         cmd = [self._binary, "image", image_ref, "--format", "json", "--scanners", "vuln"]
-        logger.debug("Executing Trivy: %s", " ".join(cmd))
-
+        logger.debug("Executing vulnerability scan: %s", " ".join(cmd))
+        is_tty = sys.stdout.isatty()
+        start = time.time()
         try:
             result = subprocess.run(
                 cmd,
@@ -74,14 +76,24 @@ class TrivyRunner:
                 check=False,
             )
         except subprocess.TimeoutExpired as exc:
-            raise TrivyError(f"Trivy scan timed out for image {image_ref}") from exc
+            raise TrivyError(f"Vulnerability scan timed out for image {image_ref}") from exc
         except subprocess.SubprocessError as exc:
             raise TrivyError(f"Trivy execution failed: {exc}") from exc
 
+        # Progress spinner (cross-shell compatible via \r)
+        if is_tty:
+            elapsed = int(time.time() - start)
+            line = f"Scanning image: {image_ref} ... [elapsed: {elapsed}s]"
+            sys.stdout.write("\r" + " " * 100 + "\r"); sys.stdout.write(f"\r{line.ljust(80)}")
+            sys.stdout.flush()
+
         if result.returncode != 0:
-            logger.error("Trivy stderr: %s", result.stderr)
+            logger.error("Vulnerability scanner stderr: %s", result.stderr)
             raise TrivyError(f"Trivy failed with exit code {result.returncode}")
 
+        if is_tty:
+            sys.stdout.write("\r" + " " * 100 + "\r"); sys.stdout.write(f"\r{'Scanning image: ' + image_ref + ' ... OK'.ljust(80)}\n")
+            sys.stdout.flush()
         return self._parse_trivy_output(result.stdout)
 
     def _parse_trivy_output(self, output: str) -> VulnSummary:

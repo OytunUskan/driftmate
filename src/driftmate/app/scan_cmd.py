@@ -71,7 +71,7 @@ def run_scan(path: Optional[str] = None, output: Optional[str] = None, scan_cve:
         raise SystemExit(1)
 
     if scan_cve:
-        print("CVE scanning enabled (Trivy) — image scans begin now (progress shown):")
+        print("CVE scanning enabled — image scans begin now (progress shown):")
 
     print(f"Scanning directory: {target_path} ...")
     analyzer = DriftAnalyzer(checkout_path=target_path)

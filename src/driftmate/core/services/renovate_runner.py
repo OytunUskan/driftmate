@@ -94,7 +94,7 @@ class RenovateRunner:
         is_tty = sys.stdout.isatty()
         start = time.time()
 
-        def _progress():
+        def _progress() -> None:
             while True:
                 elapsed = int(time.time() - start)
                 line = f"Discovering dependencies... [elapsed: {elapsed}s]"
@@ -120,15 +120,7 @@ class RenovateRunner:
             )
         except subprocess.TimeoutExpired as exc:
             raise RenovateError("Renovate execution timed out after 120s") from exc
-        except SubprocessError as exc:
-            raise RenovateError(f"Renovate execution failed: {exc}") from exc
-            proc.wait()
-            raise RenovateError("Renovate execution timed out after 120s")
         except Exception as exc:
-            raise RenovateError(f"Renovate execution failed: {exc}")
-        except subprocess.TimeoutExpired as exc:
-            raise RenovateError("Renovate execution timed out after 120s") from exc
-        except subprocess.SubprocessError as exc:
             raise RenovateError(f"Renovate execution failed: {exc}") from exc
 
         if is_tty:

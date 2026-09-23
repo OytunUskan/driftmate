@@ -16,7 +16,7 @@ from driftmate.core.services.renovate_runner import RenovateRunner
 from driftmate.core.services.trivy_runner import TrivyRunner
 
 
-def _check_dependency_scanning():
+def _check_dependency_scanning() -> None:
     if not shutil.which("npm"):
         print("Error: Node.js/npm not found. Required for dependency scanning.")
         print("Installation: https://github.com/nvm-sh/nvm")
@@ -68,9 +68,9 @@ def run_init() -> None:
     mode_choice = input("Select mode [1/2] (default 2): ").strip()
     full_mode = (mode_choice == "1")
 
-    github_token = ""
-    telegram_bot_token = ""
-    chat_id = ""
+    github_token: str = ""
+    telegram_bot_token: str = ""
+    chat_id: Optional[str] = None
 
     if full_mode:
         # 1. GitHub Token (optional — blank allowed with warning)

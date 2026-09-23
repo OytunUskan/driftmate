@@ -9,3 +9,4 @@
 - Webhook-based notification instead of long-polling
 - CI/CD integration (auto-trigger on branch merge)
 - Docker containerization (requires mounting `docker.sock` and a volume for `git worktree` paths if running inside a container).
+- Cache dizinini periyodik temizleme / stale-lock kontrolü ekleme (renovate_runner health-check)

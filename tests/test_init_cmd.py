@@ -6,7 +6,7 @@ import time
 from unittest.mock import MagicMock, patch
 
 
-from driftmate.app.init_cmd import _check_renovate
+from driftmate.app.init_cmd import _check_dependency_scanning as _check_renovate
 
 @patch("shutil.which")
 def test_check_renovate_no_npm(mock_which):

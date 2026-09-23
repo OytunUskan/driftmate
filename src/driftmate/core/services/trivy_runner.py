@@ -37,6 +37,8 @@ class VulnSummary:
 
 
 class TrivyRunner:
+    _image_cache: dict[str, Optional[VulnSummary]] = {}
+
     def __init__(self, binary_path: Optional[str] = None) -> None:
         self._binary = binary_path or shutil.which("trivy")
 
@@ -57,7 +59,12 @@ class TrivyRunner:
             return False
 
     def scan_image(self, image_ref: str) -> VulnSummary:
-        """Scan a Docker image ref for vulnerabilities using Trivy JSON output."""
+        if image_ref in TrivyRunner._image_cache:
+            cached = TrivyRunner._image_cache[image_ref]
+            if cached is None:
+                raise TrivyError(f"Vulnerability scan cached failure for image {image_ref}")
+            return cached
+        """Scan a Docker image ref for vulnerabilities using vulnerability-scan JSON output."""
         if not self._binary:
             raise TrivyError(
                 "Trivy CLI not found. Please install it (e.g. https://aquasecurity.github.io/trivy/)."
@@ -94,7 +101,9 @@ class TrivyRunner:
         if is_tty:
             sys.stdout.write("\r" + " " * 100 + "\r"); sys.stdout.write(f"\r{'Scanning image: ' + image_ref + ' ... OK'.ljust(80)}\n")
             sys.stdout.flush()
-        return self._parse_trivy_output(result.stdout)
+        vs = self._parse_trivy_output(result.stdout)
+        TrivyRunner._image_cache[image_ref] = vs
+        return vs
 
     def _parse_trivy_output(self, output: str) -> VulnSummary:
         summary = VulnSummary()

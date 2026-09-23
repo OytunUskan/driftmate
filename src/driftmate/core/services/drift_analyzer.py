@@ -117,7 +117,7 @@ class DriftAnalyzer:
                         vs = self._trivy_runner.scan_image(image_ref)
                         report.vuln_summary = vs
                     except Exception as exc:
-                        logger.error("Trivy scan failed for %s: %s", dep.name, exc)
+                        logger.error("Vulnerability scan failed for %s: %s", dep.name, exc)
                         # Continue with drift report but no CVE data
 
             # Compute field diff for Helm and Terraform (not Docker)

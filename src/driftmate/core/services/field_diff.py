@@ -11,6 +11,7 @@ import io
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+import urllib.request
 import yaml
 import requests
 

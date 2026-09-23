@@ -5,6 +5,8 @@ import logging
 import os
 import shutil
 import subprocess
+import sys
+import time
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -89,6 +91,24 @@ class RenovateRunner:
         ]
 
         logger.debug("Executing Renovate: %s in %s", " ".join(cmd), repo_path)
+        is_tty = sys.stdout.isatty()
+        start = time.time()
+
+        def _progress():
+            while True:
+                elapsed = int(time.time() - start)
+                line = f"Discovering dependencies... [elapsed: {elapsed}s]"
+                if is_tty:
+                    sys.stdout.write("\r" + " " * 100 + "\r")
+                    sys.stdout.write(f"\r{line.ljust(80)}")
+                    sys.stdout.flush()
+                else:
+                    sys.stdout.write(line + "\n")
+                    sys.stdout.flush()
+                time.sleep(1)
+
+        progress_thread = threading.Thread(target=_progress, daemon=True)
+        progress_thread.start()
         try:
             result = subprocess.run(
                 cmd,
@@ -100,9 +120,21 @@ class RenovateRunner:
             )
         except subprocess.TimeoutExpired as exc:
             raise RenovateError("Renovate execution timed out after 120s") from exc
+        except SubprocessError as exc:
+            raise RenovateError(f"Renovate execution failed: {exc}") from exc
+            proc.wait()
+            raise RenovateError("Renovate execution timed out after 120s")
+        except Exception as exc:
+            raise RenovateError(f"Renovate execution failed: {exc}")
+        except subprocess.TimeoutExpired as exc:
+            raise RenovateError("Renovate execution timed out after 120s") from exc
         except subprocess.SubprocessError as exc:
             raise RenovateError(f"Renovate execution failed: {exc}") from exc
 
+        if is_tty:
+            sys.stdout.write("\r" + " " * 100 + "\r")
+            sys.stdout.write(f"\r{'Dependency discovery complete'.ljust(80)}\n")
+            sys.stdout.flush()
         if result.returncode != 0:
             logger.error("Renovate stderr: %s", result.stderr)
             raise RenovateError(f"Renovate failed with exit code {result.returncode}")

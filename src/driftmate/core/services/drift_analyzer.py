@@ -13,6 +13,7 @@ from driftmate.core.interfaces.repo_provider import RepoProvider
 from driftmate.core.models.repo import Content
 from driftmate.core.services.renovate_runner import RenovateRunner, RenovateError
 from driftmate.core.services.trivy_runner import TrivyRunner, VulnSummary
+from driftmate.core.services.field_diff import FieldDiff, compute_field_diff
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ class DriftReport:
     recommendation: str = ""
     package_file: str = ""
     vuln_summary: Optional[VulnSummary] = None
+    field_diff: Optional[FieldDiff] = None
 
 
 class ManifestError(Exception):
@@ -115,6 +117,21 @@ class DriftAnalyzer:
                     except Exception as exc:
                         logger.error("Trivy scan failed for %s: %s", dep.name, exc)
                         # Continue with drift report but no CVE data
+
+            # Compute field diff for Helm and Terraform (not Docker)
+            if dep.datasource != "docker":
+                try:
+                    fd = compute_field_diff(
+                        dep_name=dep.name,
+                        datasource=dep.datasource,
+                        current_value=dep.current_value,
+                        new_value=dep.new_value,
+                        package_file=dep.package_file,
+                    )
+                    if fd is not None:
+                        report.field_diff = fd
+                except Exception as exc:
+                    logger.debug("Field diff failed for %s: %s", dep.name, exc)
 
             if dep.package_file.endswith(".tf") or dep.datasource == "terraform-module":
                 if report.is_drifted:

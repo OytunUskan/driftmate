@@ -116,7 +116,8 @@ class RenovateRunner:
                 env=env,
                 capture_output=True,
                 text=True,
-                timeout=120,
+                timeout=180,  # cold cache lookups across many dependencies can exceed 120s
+                # adjusted after real test (72s discovery / real-repo-test)
             )
         except subprocess.TimeoutExpired as exc:
             raise RenovateError("Renovate execution timed out after 120s") from exc

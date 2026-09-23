@@ -5,11 +5,14 @@ level of nested keys to produce added/removed/type_changed summaries.
 """
 
 import logging
-import urllib.request
+import tempfile
+import tarfile
+import io
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
 import yaml
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -96,25 +99,24 @@ def fetch_helm_values(chart_repo: str, chart_name: str, version: str) -> Optiona
 
     Returns parsed YAML dict or None on failure.
     """
-    url = f"{chart_repo.rstrip('/')}/charts/{chart_name}/{chart_name}-{version}.tgz"
+    url = f"{chart_repo.rstrip('/')}/{chart_name}-{version}.tgz"
     logger.debug("Fetching Helm chart archive: %s", url)
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "Driftmate-FieldDiff"})
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            import io
-            import tarfile
-            import tempfile
-            data = resp.read()
-            with tempfile.SpooledTemporaryFile() as tmp:
-                tmp.write(data)
-                tmp.seek(0)
-                with tarfile.open(fileobj=tmp, mode="r:gz") as tar:
-                    for member in tar.getmembers():
-                        if member.name.endswith("/values.yaml") or member.name == "values.yaml":
-                            f = tar.extractfile(member)
-                            if f:
-                                content = f.read().decode("utf-8")
-                                return yaml.safe_load(content)
+        resp = requests.get(url, headers={"User-Agent": "Driftmate-FieldDiff/1.0"}, timeout=30, allow_redirects=True)
+        if resp.status_code != 200:
+            logger.warning("Failed to fetch Helm values for %s %s: HTTP %d", chart_name, version, resp.status_code)
+            return None
+        data = resp.content
+        with tempfile.SpooledTemporaryFile() as tmp:
+            tmp.write(data)
+            tmp.seek(0)
+            with tarfile.open(fileobj=tmp, mode="r:gz") as tar:
+                for member in tar.getmembers():
+                    if member.name.endswith("/values.yaml") or member.name == "values.yaml":
+                        f = tar.extractfile(member)
+                        if f:
+                            content = f.read().decode("utf-8")
+                            return yaml.safe_load(content)
     except Exception as exc:
         logger.warning("Failed to fetch Helm values for %s %s: %s", chart_name, version, exc)
         return None
@@ -129,7 +131,7 @@ def fetch_terraform_vars(module_url: str, version: str) -> Optional[dict]:
     url = f"{module_url.rstrip('/')}/v{version}/variables.tf"
     logger.debug("Fetching Terraform variables: %s", url)
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "Driftmate-FieldDiff"})
+        req = urllib.request.Request(url, headers={"User-Agent": "Driftmate-FieldDiff/1.0"})
         with urllib.request.urlopen(req, timeout=30) as resp:
             content = resp.read().decode("utf-8")
             # Parse HCL variables block (simple regex-based extraction)
@@ -159,6 +161,7 @@ def compute_field_diff(
     current_value: str,
     new_value: Optional[str],
     package_file: str,
+    chart_repo: str,
 ) -> Optional[FieldDiff]:
     """Compute field diff for a dependency based on its type.
 
@@ -167,14 +170,10 @@ def compute_field_diff(
     if datasource == "docker":
         return None
 
-    if datasource == "helm":
-        # Extract chart info from dep_name (e.g. "bitnami/nginx")
-        parts = dep_name.split("/")
-        if len(parts) < 2:
+    if datasource == "helm" or (datasource in ("unknown",) and package_file and package_file.endswith("Chart.yaml")):
+        if not chart_repo:
             return None
-        repo_owner = parts[0]
-        chart_name = parts[-1]
-        chart_repo = f"https://charts.{repo_owner}.com"  # heuristic
+        chart_name = dep_name.split("/")[-1]
         old_values = fetch_helm_values(chart_repo, chart_name, current_value)
         if new_value:
             new_values = fetch_helm_values(chart_repo, chart_name, new_value)

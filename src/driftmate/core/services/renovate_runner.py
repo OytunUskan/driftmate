@@ -26,6 +26,7 @@ class RenovateDependency:
     package_file: str
     new_value: str | None = None
     update_type: str | None = None
+    registry_url: str | None = None
 
 
 @dataclass
@@ -171,6 +172,8 @@ class RenovateRunner:
                         upd_type = update.get("updateType")
 
                     dep_key = (name, package_file)
+                    registry_urls_raw = f.get("registryUrls") or f.get("registryUrl") or dep.get("registryUrls") or dep.get("registryUrl")
+                    registry_url = registry_urls_raw[0] if isinstance(registry_urls_raw, list) else registry_urls_raw
                     new_dep = RenovateDependency(
                         name=name,
                         package_name=dep.get("packageName", name),
@@ -178,7 +181,8 @@ class RenovateRunner:
                         datasource=dep.get("datasource", "unknown"),
                         package_file=package_file,
                         new_value=new_val,
-                        update_type=upd_type
+                        update_type=upd_type,
+                        registry_url=registry_url,
                     )
 
                     if dep_key in deduped:

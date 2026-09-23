@@ -37,6 +37,7 @@ class DriftReport:
     package_file: str = ""
     vuln_summary: Optional[VulnSummary] = None
     field_diff: Optional[FieldDiff] = None
+    registry_url: Optional[str] = None
 
 
 class ManifestError(Exception):
@@ -107,6 +108,7 @@ class DriftAnalyzer:
             upstream = dep.new_value if dep.new_value else dep.current_value
             report = compare_versions(dep.name, dep.current_value, upstream)
             report.package_file = dep.package_file
+            report.registry_url = dep.registry_url
             
             if scan_cve and dep.datasource == "docker":
                 image_ref = f"{dep.name}:{dep.current_value}" if dep.datasource == "docker" else None
@@ -121,13 +123,17 @@ class DriftAnalyzer:
             # Compute field diff for Helm and Terraform (not Docker)
             if dep.datasource != "docker":
                 try:
-                    fd = compute_field_diff(
-                        dep_name=dep.name,
-                        datasource=dep.datasource,
-                        current_value=dep.current_value,
-                        new_value=dep.new_value,
-                        package_file=dep.package_file,
-                    )
+                    if dep.datasource == "helm" and not dep.registry_url:
+                        fd = None
+                    else:
+                        fd = compute_field_diff(
+                            dep_name=dep.name,
+                            datasource=dep.datasource,
+                            current_value=dep.current_value,
+                            new_value=dep.new_value,
+                            package_file=dep.package_file,
+                            chart_repo=dep.registry_url or "",
+                        )
                     if fd is not None:
                         report.field_diff = fd
                 except Exception as exc:

@@ -1,11 +1,13 @@
 # Driftmate
 
-Detect Kubernetes/Helm component version drift and propose human-approved
-remediation via a ChatOps "analyze + fix" flow.
+## What is Driftmate
 
-Driftmate compares component versions declared in a target repository against
-the versions declared in their upstream GitHub repositories (Option A). There
-is no live cluster connection.
+Driftmate is an open-source CLI for engineering teams that need to know
+whether their dependency declarations (Helm charts, Terraform modules,
+Dockerfiles) have drifted from upstream releases — without connecting to a
+live cluster. It produces a structured `driftmate-report.md`, supports
+standalone scanning (no tokens needed), and can escalate to an approved
+remediation flow via notification channels.
 
 ## Architecture
 
@@ -18,85 +20,125 @@ independent core:
 
 Dependency direction is inward only: adapters (`providers/`, `channels/`,
 `build/`) import `core/`, but `core/` never imports any adapter module.
-The package lives under `src/driftmate/`.
 
-V1 scope:
+Isolation is enforced by `tests/test_isolation.py`; running
+`pytest tests/test_isolation.py` verifies zero adapter imports in core.
 
-- RepoProvider: GitHub (PyGithub)
-- NotificationChannel: Telegram long-polling (python-telegram-bot)
-- BuildRunner: local Docker (Docker SDK for Python)
+## Installation
 
-## Quick start
+```bash
+pipx install .
+driftmate init
+```
 
-1. Install globally with low friction via pipx (or `pip install -e .` for development):
-   ```bash
-   pipx install .
-   ```
-2. Run the guided interactive setup to configure your tokens and test Docker daemon health:
-   ```bash
-   driftmate init
-   ```
-   *(This guides you through setting up `GITHUB_TOKEN`, `TELEGRAM_BOT_TOKEN`, and automatically detects your `TELEGRAM_CHAT_ID` by prompting you to send a message to your bot).*
-3. Run Driftmate:
-   ```bash
-   driftmate
-   ```
+**Prerequisite:** an industry-standard dependency-scanning CLI must be
+available (installed via npm; the CLI operates in dry-run/lookup mode
+to discover dependencies without modifying the repo).
+
+## Usage
+
+### Standalone / scan mode (no tokens required)
+
+```bash
+driftmate scan [path]
+driftmate scan --cve-target helm-chart/Chart.yaml [path]
+```
+
+- Produces `driftmate-report.md` in the target directory.
+- Does **not** require `GITHUB_TOKEN`, `TELEGRAM_BOT_TOKEN`, or
+  `TELEGRAM_CHAT_ID`.
+- `--cve-target`: restrict scan to a specific file/manifest; useful when
+  scanning large repos with multiple dependency sources.
+- `--cve` (or `--cve-target` with vulnerability scanning): enables a container
+  vulnerability scan via a vulnerability scanner. This increases
+  runtime significantly (~60–120s per image) because it pulls and scans
+  container references found in `Dockerfile` or `docker-compose` files.
+  If you only need version-drift reporting, omit `--cve`.
+
+### Full mode (human-approved fix / ChatOps escalation flow)
+
+```bash
+driftmate
+```
+
+Requires `GITHUB_TOKEN`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (.env or
+exported). Runs the full loop: analyze → notify → wait for human approval
+(telegram/onAction) → build → push → notify result.
+
+## Report output
+
+`driftmate-report.md` is written to the scanned directory. Example structure
+(from a real `nginx` Helm chart scan):
+
+```markdown
+# Driftmate Report
+
+**Scanned Path:** `/path/to/repo`
+**Scan Timestamp:** `2026-09-23 ... UTC`
+
+## Summary
+
+| Component | File | Current | Target | Severity | CVEs | Field Changes |
+|---|---|---|---|---|---|---|
+| example-service | Dockerfile | 1.2.0 | 1.3.0 | HIGH | 0C/2H/5M | 3 added, 1 removed |
+
+## Field-Level Changes
+
+### nginx (helm-chart/Chart.yaml) — Field Changes
+- Added: automountServiceAccountToken, cloneStaticSiteFromGit.extraEnvVarsSecret, ...
+- Removed: resources.limits, resources.requests
+- Type changed: resources, ingress, containerSecurityContext, ...
+
+## Text Report
+
+```text
+Drift report:
+- [DRIFT] nginx (helm-chart/Chart.yaml): 15.0.0 -> 15.14.2 (HIGH)
+```
+```
+
+Field-level diffs come from comparing upstream `values.yaml` archives
+retrieved via the dependency-scanning CLI's registry metadata (real
+`registryUrl`, not a guessed URL).
 
 ## Configuration
 
-`config.yaml` selects the active adapters. Credentials are never stored as
-values; each `*_env` field is an environment variable name resolved at load
-time. See `.env.example` for the required variables.
+`config.yaml` (optional): settings for `RepoProvider`, `NotificationChannel`,
+`BuildRunner`, severity thresholds, and scan scope.
 
-Required env vars: `GITHUB_TOKEN`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
-Registry vars (`DOCKER_REGISTRY_URL`, `DOCKER_USERNAME`, `DOCKER_PASSWORD`)
-are **optional** — v1 does local builds only and never pushes to a registry.
+`.env` (optional): secrets (`GITHUB_TOKEN`, `TELEGRAM_BOT_TOKEN`,
+`TELEGRAM_CHAT_ID`). If missing, full-flow commands exit with a clear
+error; standalone `scan` mode works without them.
 
-## Component Discovery (Renovate)
+## Component Discovery (an industry-standard dependency scanning engine)
 
-Driftmate no longer requires a `driftmate.yaml` file. Instead, it utilizes the [Renovate CLI](https://docs.renovatebot.com/) to automatically discover dependencies in your repository.
+Driftmate no longer requires a `driftmate.yaml` file. Instead, it utilizes a
+dependency-scanning CLI (installed via npm) to automatically discover
+dependencies in your repository.
 
-- **Supported Formats**: Dockerfiles, Helm Charts, Terraform modules, and more.
-- **How it works**: When you run `driftmate` (analyze), it automatically scans your project for standard manifest files and compares them against upstream registries.
-- **Remediation**: When you approve a version bump in Telegram, Driftmate automatically applies the fix directly to the native configuration file (e.g., `Dockerfile`, `Chart.yaml`).
+The CLI runs in `--dry-run=lookup` mode and outputs dependency
+metadata including `depName`, `currentValue`, `packageFile`, and registry
+URLs. Driftmate parses this output to build `DriftReport` objects.
 
+## Known limitations
 
-## Local build (worktree)
-
-On approval, the fix is committed to a branch and (optionally) built locally.
-Set `checkout_path` in `config.yaml` to a local clone of the target repo; the
-orchestrator then runs `git worktree add` for the fix branch, builds from that
-temporary path, and removes the worktree afterwards. Without `checkout_path`
-the build step is skipped.
-
-## State management (known limitation)
-
-Telegram short-ID -> drift-context mapping is stored in an in-memory store
-(`channels/common/state_store.py`). **It is lost when the bot restarts.** This
-is a deliberate V1 limitation; a persistent store (Redis/SQLite) is planned.
+- State management is in-memory only (`DriftAnalyzer` holds reports in
+  a Python list); no persistent store is wired in V1.
+- `push()` adapter is implemented but not wired in the V1 remediation
+  flow; builds produce only local images, and registry pushes are not
+  performed (conscious V1 limitation).
+- `scan_cmd.py` produces reports locally; push/merge requires the full
+  mode with configured `RepoProvider`.
 
 ## Development
 
 ```bash
-pip install -e ".[test]"
 pytest
-mypy src/driftmate
+mypy src/driftmate/core/
+python -m pytest tests/test_isolation.py
 ```
 
-Core isolation check:
+Isolation rules are enforced: `core/` must not import `providers/`,
+`channels/`, or `build/`.
 
-```bash
-grep -rnE "from (providers|channels|build)|import (providers|channels|build)" src/driftmate/core/ && echo VIOLATION || echo OK
-```
-
-## Backlog (V2+)
-
-- Persistent state store (Redis/SQLite)
-- The `push()` adapter is implemented but not wired in the V1 remediation flow; builds only produce local images, and registry pushes are not performed (conscious V1 limitation).
-- **Azure DevOps RepoProvider (V2 feasibility):** Azure DevOps REST API — `getFile` via `GET /{project}/_apis/git/repositories/{repositoryId}/items?path=...`. The **`createBranch`, `commitFile`, and `publishBranch`** methods cannot be called separately as in GitHub; in Azure DevOps, all are performed via a **single pushes endpoint**: `POST /{project}/_apis/git/repositories/{repositoryId}/pushes` (apiVersion 7.0+). The request body includes `refUpdates` (branch name + old commit SHA) and `commits[].changes[]` (file path, changeType: `add`/`edit`/`delete`, content). PAT scope: `Code (Read/Write)` (`vso.code_write`). The ADO adapter must combine the three separate methods of the Protocol interface into this single push call.
-- **Slack NotificationChannel (V2 feasibility):** `sendMessage` → `chat.postMessage`; `updateMessage` → `chat.update`; `onAction` → **Socket Mode** for interactive button feedback (no public HTTPS endpoint / ngrok required, works from WSL2 — same model as Telegram polling). Slack Socket Mode is WebSocket-based; whereas Telegram uses long-polling + `update.callback_query`, Slack uses `SocketModeHandler` to listen for `interactivity` events.
-- AI risk report, Slack, Azure DevOps, AWS CodeBuild
-- Kubernetes manifest drift analysis
-- Webhook-based notification instead of long-polling
-- CI/CD integration (auto-trigger on branch merge)
-- Docker containerization (requires mounting `docker.sock` and a volume for `git worktree` paths if running inside a container).
+## See BACKLOG.md for the V2+ roadmap.

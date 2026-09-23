@@ -109,32 +109,6 @@ def run_scan(path: Optional[str] = None, output: Optional[str] = None, scan_cve:
 ```
 """
     
-    # Try to add real field diffs for Helm/Terraform if registry access available
-    extra_field_sections = []
-    for r in reports:
-        if r.package_file and (r.package_file.endswith("Chart.yaml") or r.package_file.endswith(".tf")):
-            fd = None
-            try:
-                chart_repo = getattr(r, "registry_url", None) or ""
-                if r.package_file.endswith("Chart.yaml") and not chart_repo:
-                    fd = None
-                else:
-                        fd = compute_field_diff(
-                            dep_name=r.component,
-                            datasource="helm" if "Chart" in r.package_file else "terraform-module",
-                            current_value=r.declared_version,
-                            new_value=r.upstream_version,
-                            package_file=r.package_file,
-                            chart_repo=chart_repo,
-                        )
-            except Exception:
-                fd = None
-            if fd is not None and not fd.is_empty():
-                extra_field_sections.append(f"### {r.component} ({r.package_file}) — Field Changes\n- Added: {', '.join(fd.added) if fd.added else '-'}\n- Removed: {', '.join(fd.removed) if fd.removed else '-'}\n- Type changed: {', '.join(fd.type_changed) if fd.type_changed else '-'}")
-    
-    if extra_field_sections:
-        md_content += "\n\n## Real Registry Field Differences (from upstream)\n\n" + "\n\n".join(extra_field_sections)
-
     output_path = output or os.path.join(target_path, "driftmate-report.md")
     try:
         with open(output_path, "w", encoding="utf-8") as f:

@@ -56,7 +56,8 @@ def main() -> None:
         return
 
     if args.command == "scan":
-        run_scan(path=args.path, output=args.output, scan_cve=args.cve, cve_target=args.cve_target)
+        scan_cve = args.cve or bool(args.cve_target)
+        run_scan(path=args.path, output=args.output, scan_cve=scan_cve, cve_target=args.cve_target)
         return
 
     dotenv_path = Path.cwd() / ".env"

@@ -36,7 +36,7 @@ def build_repo_provider_factory(config: AppConfig) -> Callable[[str, str], RepoP
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="driftmate",
-        description="Driftmate — Kubernetes/Helm drift detection via ChatOps.",
+        description="Driftmate — dependency version drift detection and human-approved remediation for Dockerfiles, Helm charts, and Terraform modules.",
         add_help=True,
     )
     subparsers = parser.add_subparsers(dest="command")
@@ -46,8 +46,8 @@ def main() -> None:
     scan_parser = subparsers.add_parser("scan", help="Scan local path for drift without tokens.")
     scan_parser.add_argument("path", nargs="?", default=None, help="Path to scan (defaults to cwd).")
     scan_parser.add_argument("-o", "--output", default=None, help="Output markdown report path.")
-    scan_parser.add_argument("--cve", action="store_true", default=False, help="Enable Trivy CVE scanning.")
-    scan_parser.add_argument("--cve-target", default=None, help="Only scan the specified package file path.")
+    scan_parser.add_argument("--cve", action="store_true", default=False, help="Enable container vulnerability scanning (adds ~60-120s per image).")
+    scan_parser.add_argument("--cve-target", default=None, help="Only scan the specified package file path (implies --cve).")
 
     args = parser.parse_args()
 

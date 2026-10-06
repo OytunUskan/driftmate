@@ -104,12 +104,16 @@ class TelegramNotificationChannel:
     ) -> None:
         if self._analyze_callback is None:
             return
+        if not self._is_configured_chat(update):
+            return
         user_id = str(update.effective_user.id)
         await update.message.reply_text("Analyzing drift...")
         fut = self._executor.submit(self._analyze_callback, user_id)
         fut.add_done_callback(self._log_future_exception)
 
     async def _handle_query(self, update: Update, context) -> None:
+        if not self._is_configured_chat(update):
+            return
         query = update.callback_query
         await query.answer()
 
@@ -125,6 +129,33 @@ class TelegramNotificationChannel:
         if self._callback is not None:
             fut = self._executor.submit(self._callback, user_id, metadata)
             fut.add_done_callback(self._log_future_exception)
+
+    def _is_configured_chat(self, update: Update) -> bool:
+        """Only updates from the configured chat are acted upon.
+
+        Telegram delivers chat ids as ints while the configured value is a
+        string, so both sides are compared as strings.
+        """
+        chat_id = self._update_chat_id(update)
+        if chat_id is not None and chat_id == str(self._chat_id):
+            return True
+        logger.warning(
+            "Ignoring Telegram update from unauthorized chat %s (configured: %s)",
+            chat_id,
+            self._chat_id,
+        )
+        return False
+
+    @staticmethod
+    def _update_chat_id(update: Update) -> str | None:
+        chat = update.effective_chat
+        if chat is None:
+            query = update.callback_query
+            message = query.message if query is not None else None
+            chat = message.chat if message is not None else None
+        if chat is None:
+            return None
+        return str(chat.id)
 
     @staticmethod
     def _log_future_exception(future) -> None:

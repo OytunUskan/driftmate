@@ -14,6 +14,12 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# Dependency discovery timeout, in seconds. Cold-cache lookups across many
+# dependencies were measured at ~72s on real repos, so the limit was raised
+# from 120 to 180. Kept as a constant so subprocess.run and the timeout error
+# message can never drift apart again.
+LOOKUP_TIMEOUT_SECONDS = 180
+
 
 class RenovateError(Exception):
     """Raised when Renovate execution fails."""
@@ -94,35 +100,48 @@ class RenovateRunner:
         is_tty = sys.stdout.isatty()
         start = time.time()
 
+        stop_event = threading.Event()
+
         def _progress() -> None:
-            while True:
+            while not stop_event.is_set():
                 elapsed = int(time.time() - start)
                 line = f"Discovering dependencies... [elapsed: {elapsed}s]"
-                if is_tty:
-                    sys.stdout.write("\r" + " " * 100 + "\r")
-                    sys.stdout.write(f"\r{line.ljust(80)}")
-                    sys.stdout.flush()
-                else:
-                    sys.stdout.write(line + "\n")
-                    sys.stdout.flush()
-                time.sleep(1)
+                sys.stdout.write("\r" + " " * 100 + "\r")
+                sys.stdout.write(f"\r{line.ljust(80)}")
+                sys.stdout.flush()
+                # wait() instead of sleep(): stop_event.set() wakes the loop at once.
+                stop_event.wait(1.0)
 
-        progress_thread = threading.Thread(target=_progress, daemon=True)
-        progress_thread.start()
-        try:
-            result = subprocess.run(
-                cmd,
-                cwd=repo_path,
-                env=env,
-                capture_output=True,
-                text=True,
-                timeout=180,  # cold cache lookups across many dependencies can exceed 120s
-                # adjusted after real test (72s discovery / real-repo-test)
+        # No TTY (Docker/log pipelines) means no spinner: stdout must stay
+        # silent for the whole lookup instead of one line per second.
+        progress_thread: threading.Thread | None = None
+        if is_tty:
+            progress_thread = threading.Thread(
+                target=_progress, daemon=True, name="renovate-progress"
             )
-        except subprocess.TimeoutExpired as exc:
-            raise RenovateError("Renovate execution timed out after 120s") from exc
-        except Exception as exc:
-            raise RenovateError(f"Renovate execution failed: {exc}") from exc
+            progress_thread.start()
+        try:
+            try:
+                result = subprocess.run(
+                    cmd,
+                    cwd=repo_path,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=LOOKUP_TIMEOUT_SECONDS,
+                )
+            except subprocess.TimeoutExpired as exc:
+                raise RenovateError(
+                    f"Renovate execution timed out after {LOOKUP_TIMEOUT_SECONDS}s"
+                ) from exc
+            except Exception as exc:
+                raise RenovateError(f"Renovate execution failed: {exc}") from exc
+        finally:
+            # Every exit path — success, timeout, unexpected error — must reclaim
+            # the spinner thread; otherwise it survives for the whole process.
+            stop_event.set()
+            if progress_thread is not None:
+                progress_thread.join()
 
         if is_tty:
             sys.stdout.write("\r" + " " * 100 + "\r")

@@ -273,6 +273,7 @@ def bump_package_file(
     if package_file.endswith("Dockerfile") or "Dockerfile" in package_file:
         lines = file_content.splitlines()
         updated_lines = []
+        bumped = False
         for line in lines:
             stripped = line.strip()
             if stripped.upper().startswith("FROM "):
@@ -282,28 +283,41 @@ def bump_package_file(
                     if not tokens[idx].startswith("--"):
                         image_idx = idx
                         break
-                
+
                 if image_idx != -1:
                     raw_image = tokens[image_idx]
                     parts = raw_image.split(":")
                     image_name = parts[0].split("@")[0]
                     short_image_name = image_name.split("/")[-1]
-                    
+
                     if component in (image_name, short_image_name):
                         digest = ""
                         if "@" in raw_image:
                             digest = "@" + raw_image.split("@", 1)[1]
                         new_image = f"{image_name}:{target_version}{digest}"
+                        if new_image != raw_image:
+                            bumped = True
                         tokens[image_idx] = new_image
                         indent = line[: len(line) - len(line.lstrip())]
                         line = indent + " ".join(tokens)
             updated_lines.append(line)
+        if not bumped:
+            raise ValueError(
+                f"Component {component!r} not found in {package_file} "
+                f"at a version other than {target_version}"
+            )
         return "\n".join(updated_lines) + "\n"
     elif package_file.endswith("Chart.yaml") or package_file.endswith("Chart.yml"):
         doc = YAML_RT.load(file_content)
+        bumped = False
         for dep in doc.get("dependencies", []):
             if dep.get("name") == component:
                 dep["version"] = DoubleQuotedScalarString(target_version)
+                bumped = True
+        if not bumped:
+            raise ValueError(
+                f"Component {component!r} not found in dependencies of {package_file}"
+            )
         import io
         buf = io.StringIO()
         YAML_RT.dump(doc, buf)

@@ -119,12 +119,25 @@ class RemediationOrchestrator:
             )
             return
 
+        current = self._repo.getFile(package_file, self._base_ref)
+        try:
+            updated = bump_package_file(
+                current.content, package_file, component, target_version
+            )
+        except ValueError as exc:
+            logger.warning(
+                "Auto-bump failed for %s in %s: %s", component, package_file, exc
+            )
+            self._notification.sendMessage(
+                f"Auto-bump failed for {component} in {package_file}: {exc}\n"
+                "No changes were made. Please update the version manually.",
+                [],
+            )
+            return
+
         branch = self._repo.createBranch(
             self._branch_name(component), self._base_ref
         )
-
-        current = self._repo.getFile(package_file, self._base_ref)
-        updated = bump_package_file(current.content, package_file, component, target_version)
 
         self._repo.commitFile(
             branch.name,

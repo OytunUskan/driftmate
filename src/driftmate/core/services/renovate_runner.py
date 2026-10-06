@@ -100,20 +100,20 @@ class RenovateRunner:
             while not stop_event.is_set():
                 elapsed = int(time.time() - start)
                 line = f"Discovering dependencies... [elapsed: {elapsed}s]"
-                if is_tty:
-                    sys.stdout.write("\r" + " " * 100 + "\r")
-                    sys.stdout.write(f"\r{line.ljust(80)}")
-                    sys.stdout.flush()
-                else:
-                    sys.stdout.write(line + "\n")
-                    sys.stdout.flush()
+                sys.stdout.write("\r" + " " * 100 + "\r")
+                sys.stdout.write(f"\r{line.ljust(80)}")
+                sys.stdout.flush()
                 # wait() instead of sleep(): stop_event.set() wakes the loop at once.
                 stop_event.wait(1.0)
 
-        progress_thread = threading.Thread(
-            target=_progress, daemon=True, name="renovate-progress"
-        )
-        progress_thread.start()
+        # No TTY (Docker/log pipelines) means no spinner: stdout must stay
+        # silent for the whole lookup instead of one line per second.
+        progress_thread: threading.Thread | None = None
+        if is_tty:
+            progress_thread = threading.Thread(
+                target=_progress, daemon=True, name="renovate-progress"
+            )
+            progress_thread.start()
         try:
             try:
                 result = subprocess.run(
@@ -133,7 +133,8 @@ class RenovateRunner:
             # Every exit path — success, timeout, unexpected error — must reclaim
             # the spinner thread; otherwise it survives for the whole process.
             stop_event.set()
-            progress_thread.join()
+            if progress_thread is not None:
+                progress_thread.join()
 
         if is_tty:
             sys.stdout.write("\r" + " " * 100 + "\r")

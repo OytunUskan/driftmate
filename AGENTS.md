@@ -10,6 +10,8 @@ Driftmate, upstream dependency drift tespiti yapan ve isteğe bağlı olarak ins
 
 ## Workflow Rules
 
+- Bu kurallar etkileşimli oturumlar içindir. `ralph` ajanı (otomatik döngü) bu kuralları uygulamaz; sadece kendi istemindeki adımları izler.
+
 - PLAN MODE sonrası: `plan-review` OTOMATİK çalıştırılır — kullanıcı ayrıca “review et” demek zorunda değildir. Bu, her plan çalıştırmasının standart, ayrılmaz bir parçasıdır.
 - BUILD MODE sonrası: `code-review` OTOMATİK çalıştırılır — aynı şekilde, ayrıca istenmesine gerek yoktur.
 - Her `plan-review` veya `code-review` sonunun EN SONUNA, aşağıdaki formatta bir özet bloğu eklenir:

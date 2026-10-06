@@ -14,6 +14,12 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# Dependency discovery timeout, in seconds. Cold-cache lookups across many
+# dependencies were measured at ~72s on real repos, so the limit was raised
+# from 120 to 180. Kept as a constant so subprocess.run and the timeout error
+# message can never drift apart again.
+LOOKUP_TIMEOUT_SECONDS = 180
+
 
 class RenovateError(Exception):
     """Raised when Renovate execution fails."""
@@ -122,11 +128,12 @@ class RenovateRunner:
                     env=env,
                     capture_output=True,
                     text=True,
-                    timeout=180,  # cold cache lookups across many dependencies can exceed 120s
-                    # adjusted after real test (72s discovery / real-repo-test)
+                    timeout=LOOKUP_TIMEOUT_SECONDS,
                 )
             except subprocess.TimeoutExpired as exc:
-                raise RenovateError("Renovate execution timed out after 120s") from exc
+                raise RenovateError(
+                    f"Renovate execution timed out after {LOOKUP_TIMEOUT_SECONDS}s"
+                ) from exc
             except Exception as exc:
                 raise RenovateError(f"Renovate execution failed: {exc}") from exc
         finally:
